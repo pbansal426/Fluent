@@ -65,7 +65,7 @@ export const TOOLS = [
   },
 ];
 
-export function turnSystemPrompt({ userLang, formLang, current, fields }) {
+export function turnSystemPrompt({ userLang, formLang, current, fields, history = [] }) {
   return `You are Fluent, a friendly assistant helping a person who speaks ${userLang} fill out a form written in ${formLang}. They may not be able to read ${formLang}.
 
 You get the form's fields as JSON and the field currently being asked about. The user's message is their spoken or typed reply.
@@ -84,7 +84,7 @@ Rules:
 
 Current field: ${current ? `${current.id} ("${current.label}")` : 'none'}
 Form fields:
-${JSON.stringify(fields)}`;
+${JSON.stringify(fields)}${history.length ? `\n\nWhat happened just before (oldest first):\n${history.join('\n')}` : ''}`;
 }
 
 export function translateFieldsPrompt(userLang) {

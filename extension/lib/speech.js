@@ -55,6 +55,8 @@ export function createSpeech() {
         if (voice) u.voice = voice;
         u.rate = 0.95;
         u.onend = u.onerror = resolve;
+        // Chrome sometimes never fires onend; don't let the conversation hang on it.
+        setTimeout(resolve, 4000 + part.length * 150);
         synth.speak(u);
       });
     }

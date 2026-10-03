@@ -202,13 +202,26 @@ async function runTurn(fn) {
   if (state.voiceOn && state.mode === 'listen') listenOnce();
 }
 
-async function phrasesFor(llm) {
-  const key = `phrases:${lang().code}`;
-  const cached = (await chrome.storage.local.get(key))[key];
-  if (cached && Object.keys(PHRASES).every((k) => cached[k])) return cached;
-  const phrases = await translatePhrases(llm, lang().name);
-  if (phrases.greeting !== PHRASES.greeting) await chrome.storage.local.set({ [key]: phrases });
-  return phrases;
+// The assistant's fixed phrases in the chosen language: cached, and fetched ahead of time
+// (when the panel opens or the language changes) so Start does not wait on it.
+const phraseJobs = new Map();
+function phrasesFor(llm) {
+  const { code, name } = lang();
+  if (!phraseJobs.has(code)) {
+    phraseJobs.set(
+      code,
+      (async () => {
+        const key = `phrases:${code}`;
+        const cached = (await chrome.storage.local.get(key))[key];
+        if (cached && Object.keys(PHRASES).every((k) => cached[k])) return cached;
+        const phrases = await translatePhrases(llm, name);
+        if (phrases.greeting !== PHRASES.greeting) await chrome.storage.local.set({ [key]: phrases });
+        else phraseJobs.delete(code); // the model was unreachable; try again next time
+        return phrases;
+      })()
+    );
+  }
+  return phraseJobs.get(code);
 }
 
 async function start() {
@@ -310,6 +323,7 @@ $('lang').replaceChildren(...LANGUAGES.map((l) => Object.assign(document.createE
 $('lang').addEventListener('change', async () => {
   await saveSettings();
   await reset();
+  phrasesFor(client());
 });
 $('settings-btn').addEventListener('click', () => {
   $('settings').hidden = !$('settings').hidden;
@@ -351,3 +365,4 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
 
 await loadSettings();
 render();
+phrasesFor(client());

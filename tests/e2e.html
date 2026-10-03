@@ -1,0 +1,145 @@
+<!doctype html>
+<!-- End-to-end check with the real model: the agent, the page scripts and the demo form, minus speech
+     and chrome.* APIs. Run: node tests/run-harness.mjs http://127.0.0.1:8765/tests/e2e.html out.png
+     Query: ?lang=Spanish&model=google/gemma-4-e4b&base=http://localhost:1234/v1 -->
+<meta charset="utf-8">
+<title>Fluent end-to-end</title>
+<iframe id="page" src="../demo/intake.html" style="width:1000px;height:2300px;border:0"></iframe>
+<pre id="out">running</pre>
+<script type="module">
+import { createClient } from '../extension/lib/llm.js';
+import { Agent } from '../extension/lib/agent.js';
+import { translatePhrases } from '../extension/lib/prompts.js';
+
+const q = new URLSearchParams(location.search);
+const userLang = q.get('lang') || 'Spanish';
+const SSN = '123-45-6789';
+
+// What a Spanish speaker might say for each field (keyed by the start of the English label).
+const ANSWERS = {
+  'Legal first name': ['Me llamo María Elena López García y nací el 3 de marzo de 1998'],
+  'Legal last name': ['López García'],
+  'Date of birth': ['el 3 de marzo de 1998'],
+  'Sex assigned': ['mujer'],
+  'Marital status': ['estoy casada'],
+  'Mobile phone': ['217 555 0198'],
+  'Email address': ['maria punto lopez arroba gmail punto com'],
+  'Street address': ['742 calle Green, apartamento 3'],
+  City: ['Urbana'],
+  Occupation: ['soy cocinera en un restaurante'],
+  'Preferred language': ['español'],
+  'Interpreter needed': ['sí, por favor'],
+  'Insurance provider': ['no tengo seguro'],
+  'Full name': ['mi esposo, Carlos López, y su teléfono es 217 555 0147'],
+  'Relationship to patient': ['es mi esposo'],
+  'Phone number': ['217 555 0147'],
+  'Do you have any allergies': ['sí, soy alérgica a la penicilina'],
+  'If yes, list': ['penicilina'],
+  'Do you currently smoke': ['nunca he fumado'],
+  'Current medications': ['¿qué significa eso?', 'no tomo ninguno'],
+  'I have read': ['sí, estoy de acuerdo'],
+};
+const TYPED = {
+  'Social Security Number': { value: SSN },
+  'Member ID number': { value: '' },
+  "Reason for today's visit": { value: 'Tengo dolor de cabeza y fiebre desde hace tres días.', translate: true },
+};
+
+const frame = document.getElementById('page');
+const load = (doc, src) => new Promise((resolve, reject) => {
+  const s = doc.createElement('script');
+  s.src = src; s.onload = resolve; s.onerror = reject;
+  doc.head.appendChild(s);
+});
+const find = (map, label) => Object.entries(map).find(([k]) => label.startsWith(k))?.[1];
+
+async function run() {
+  const out = { lang: userLang, transcript: [], turns: [], errors: [] };
+  const doc = frame.contentDocument;
+  for (const f of ['scan', 'overlay', 'fill']) await load(doc, `../extension/content/${f}.js`);
+  const F = frame.contentWindow.__fluent;
+  const page = {
+    scan: async () => F.scan(), apply: async (t) => F.apply(t), highlight: async (id) => F.highlight(id),
+    focus: async (id) => F.focus(id), fill: async (id, v) => F.fill(id, v), read: async (id) => F.read(id),
+  };
+
+  const sent = [];
+  const base = createClient({ baseUrl: q.get('base') || 'http://localhost:1234/v1', model: q.get('model') || 'google/gemma-4-e4b' });
+  const llm = {
+    chat: (o) => { sent.push(JSON.stringify(o.messages)); return base.chat(o); },
+    chatJson: (o) => { sent.push(JSON.stringify(o.messages)); return base.chatJson(o); },
+  };
+  const ui = {
+    say: async (t) => void out.transcript.push(`AGENT: ${t}`),
+    prompt: () => {}, status: () => {},
+    filled: (items) => out.transcript.push(`  ✓ ${items.map((i) => `${i.original} = ${i.value}`).join(' | ')}`),
+    error: (e) => out.errors.push(String(e?.message || e)),
+  };
+
+  let t0 = performance.now();
+  const phrases = await translatePhrases(llm, userLang);
+  out.phrasesMs = Math.round(performance.now() - t0);
+  out.phrasesTranslated = phrases.greeting !== undefined && !/^Hello/.test(phrases.greeting);
+
+  const agent = new Agent({ llm, page, ui, userLang, phrases });
+  t0 = performance.now();
+  await agent.start();
+  out.firstQuestionMs = Math.round(performance.now() - t0);
+
+  const used = {};
+  for (let step = 0; step < 45 && agent.mode !== 'done' && agent.current; step++) {
+    const field = agent.current;
+    console.log(`step ${step}: ${agent.mode} "${field.label}"`);
+    if (agent.mode === 'type') {
+      const typed = find(TYPED, field.label) || { value: '' };
+      const el = doc.querySelector(`[data-fluent-id="${field.id}"]`);
+      el.value = typed.value;
+      out.transcript.push(`USER TYPES in "${field.label}": ${field.sensitive ? '(private)' : typed.value}`);
+      if (typed.translate) {
+        await agent.translateTyped();
+        out.transcript.push(`  translated -> ${el.value}`);
+      }
+      await agent.continueTyped();
+      continue;
+    }
+    const answers = find(ANSWERS, field.label) || [];
+    const n = (used[field.id] = (used[field.id] || 0) + 1);
+    const text = answers[n - 1] || 'saltar, no lo sé';
+    out.transcript.push(`USER: ${text}`);
+    t0 = performance.now();
+    await agent.handleUser(text);
+    out.turns.push(Math.round(performance.now() - t0));
+  }
+  await agent.translating;
+
+  out.form = Object.fromEntries(new FormData(doc.getElementById('intake')));
+  out.mode = agent.mode;
+  out.formLang = agent.formLang;
+  out.badges = doc.querySelectorAll('[data-fluent-badge]').length;
+  out.turnMs = { median: [...out.turns].sort((a, b) => a - b)[Math.floor(out.turns.length / 2)], max: Math.max(...out.turns) };
+  const checks = {
+    'finished': agent.mode === 'done',
+    'ssn typed on page': out.form.ssn === SSN,
+    'ssn never sent to model': !sent.some((s) => s.includes(SSN)),
+    'date': out.form.dob === '1998-03-03',
+    'select translated': out.form.marital_status === 'Married' && out.form.sex === 'Female',
+    'radio': out.form.allergies === 'yes' && out.form.tobacco === 'never',
+    'consent': out.form.consent === 'on',
+    'no errors': out.errors.length === 0,
+  };
+  out.checks = checks;
+  const passed = Object.values(checks).filter(Boolean).length;
+  out.summary = `${passed}/${Object.keys(checks).length} passed`;
+  out.form.ssn = out.form.ssn && '(redacted)';
+  return out;
+}
+
+async function main() {
+  let out;
+  try { out = await run(); } catch (e) { out = { error: String(e?.stack || e), summary: '0/1 passed' }; }
+  document.getElementById('out').textContent = JSON.stringify(out, null, 1);
+}
+// Module scripts run late: the iframe may already have loaded.
+if (frame.contentDocument?.readyState === 'complete' && frame.contentWindow.location.href !== 'about:blank') main();
+else frame.addEventListener('load', main, { once: true });
+</script>

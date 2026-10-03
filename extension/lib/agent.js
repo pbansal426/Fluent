@@ -12,12 +12,17 @@ import {
   translateAnswerPrompt,
 } from './prompts.js';
 
+const FIRST_CHUNK = 4; // small, so the first question comes quickly
 const FIELD_CHUNK = 10;
 const TEXT_CHUNK = 12;
 const HISTORY_TURNS = 6;
 const MAX_SPOKEN_OPTIONS = 8;
 
 const chunks = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
+// "Name *:" -> "Name"
+const bare = (label) => label.replace(/[\s*:.]+$/, '');
+// "Name" -> "Name."   "Need help?" -> "Need help?"
+const sentence = (label) => (/[?!؟。？！]$/.test(bare(label)) ? bare(label) : `${bare(label)}.`);
 
 export class Agent {
   // page: { scan, apply, highlight, focus, fill, read }   (all async, talk to the web page)
@@ -74,7 +79,7 @@ export class Agent {
   }
 
   async translateAll(fields, texts) {
-    const fieldChunks = chunks(fields, FIELD_CHUNK);
+    const fieldChunks = [fields.slice(0, FIRST_CHUNK), ...chunks(fields.slice(FIRST_CHUNK), FIELD_CHUNK)].filter((c) => c.length);
     const jobs = fieldChunks.map((chunk) => {
       let resolve;
       const promise = new Promise((r) => (resolve = r));
@@ -141,10 +146,10 @@ export class Agent {
   // The field's name as spoken; the first field of each form section is announced with it.
   spokenLabel(field) {
     const t = this.tr(field);
-    const label = t.label.replace(/[\s*:]+$/, '');
+    const label = sentence(t.label);
     const newSection = t.section && field.section !== this.lastSection;
     this.lastSection = field.section;
-    return newSection ? `${t.section}. ${label}.` : `${label}.`;
+    return newSection ? `${sentence(t.section)} ${label}` : label;
   }
 
   setMode(mode) {
@@ -223,8 +228,16 @@ export class Agent {
   async turn(text) {
     const res = await this.llm.chat({
       messages: [
-        { role: 'system', content: turnSystemPrompt({ userLang: this.userLang, formLang: this.formLang, current: this.current, fields: this.fieldsForModel() }) },
-        ...this.history.slice(-HISTORY_TURNS * 2),
+        {
+          role: 'system',
+          content: turnSystemPrompt({
+            userLang: this.userLang,
+            formLang: this.formLang,
+            current: this.current,
+            fields: this.fieldsForModel(),
+            history: this.history.slice(-HISTORY_TURNS),
+          }),
+        },
         { role: 'user', content: text },
       ],
       tools: TOOLS,
@@ -266,15 +279,16 @@ export class Agent {
     }
     if (!res.toolCalls.length && res.content) reply = res.content;
 
-    const summary = [
-      done.length ? `Filled: ${done.map((d) => `${d.id}="${d.value}"`).join(', ')}` : '',
-      reply ? `Said: ${reply}` : '',
-    ].filter(Boolean).join(' | ');
-    this.history.push({ role: 'user', content: text }, { role: 'assistant', content: summary || '(nothing filled)' });
+    // Kept as a plain log inside the system prompt: as chat turns, small models start imitating it.
+    const outcome = [
+      done.length ? `you wrote ${done.map((d) => `${d.original} = "${d.value}"`).join(', ')}` : '',
+      reply ? `you replied "${reply}"` : '',
+    ].filter(Boolean).join('; ');
+    this.history.push(`- User said "${text}"; ${outcome || 'nothing was filled'}.`);
 
     if (done.length) {
       this.ui.filled(done);
-      await this.ui.say(`${this.phrases.filled} ${done.map((d) => `${d.label.replace(/[\s*:]+$/, '')}: ${this.spoken(d)}`).join('. ')}.`);
+      await this.ui.say(`${this.phrases.filled} ${done.map((d) => this.readBack(d)).join('. ')}.`);
     }
     if (refusedPrivate) await this.ui.say(this.phrases.private_refused);
     if (progressed) return this.advance();
@@ -283,12 +297,13 @@ export class Agent {
   }
 
   // Read choices back in the user's language, everything else as written.
-  spoken(item) {
+  readBack(item) {
     const field = this.fields.find((f) => f.id === item.id);
     const t = this.tr(field);
+    const label = bare(item.label);
+    if (field.kind === 'checkbox') return label; // "true" means nothing when read aloud
     const i = field.options.indexOf(item.value);
-    if (i >= 0 && t.options[i]) return t.options[i];
-    return item.value;
+    return `${label}: ${i >= 0 && t.options[i] ? t.options[i] : item.value}`;
   }
 
   // The user pressed Continue after typing a private or long field themselves.

@@ -1,0 +1,64 @@
+<!doctype html>
+<!-- The real side panel next to the demo form, in an ordinary browser tab (chrome.* is stubbed).
+     Handy for working on the panel without reloading the extension. The browser must be allowed to call
+     the AI endpoint: tests/run-harness.mjs starts Chrome with web security off; in your own Chrome,
+     turn on CORS in LM Studio's server settings. -->
+<meta charset="utf-8">
+<title>Fluent panel simulator</title>
+<style>
+  body { margin: 0; display: flex; height: 100vh; background: #888; }
+  #page { flex: 1; border: 0; background: #fff; }
+  #panel { width: 400px; border: 0; border-left: 1px solid #555; }
+</style>
+<iframe id="page" src="../demo/intake.html"></iframe>
+<iframe id="panel"></iframe>
+<script>
+  const q = new URLSearchParams(location.search);
+  window.SIM_SETTINGS = { lang: q.get('lang') || 'es' };
+  fetch('../extension/panel/panel.html')
+    .then((r) => r.text())
+    .then((html) => {
+      document.getElementById('panel').srcdoc = html.replace(
+        '<head>',
+        `<head><base href="${new URL('../extension/panel/', location.href)}"><script src="/tests/chrome-stub.js"><\/script>`
+      );
+    });
+
+  // Scripted walk-through used by the automated check: sim.run([...answers]) -> transcript text.
+  window.sim = {
+    panel: () => document.getElementById('panel').contentDocument,
+    page: () => document.getElementById('page').contentDocument,
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    async idle() {
+      // Wait until the panel has finished its turn (no "working" dots).
+      for (let i = 0; i < 600; i++) {
+        await this.sleep(100);
+        if (!this.panel().querySelector('.thinking') && !this.panel().getElementById('chat').hidden) return;
+      }
+      throw new Error('panel never became idle');
+    },
+    async say(text) {
+      const p = this.panel();
+      p.getElementById('text').value = text;
+      p.getElementById('send-form').requestSubmit();
+      await this.sleep(150);
+      await this.idle();
+    },
+    async click(id) {
+      this.panel().getElementById(id).click();
+      await this.sleep(150);
+      await this.idle();
+    },
+    state() {
+      const p = this.panel();
+      return {
+        bubbles: [...p.querySelectorAll('.bubble')].map((b) => `${b.className.replace('bubble ', '')}: ${b.textContent}`),
+        typeCard: p.getElementById('type-card').hidden ? null : p.getElementById('type-text').textContent,
+        textDisabled: p.getElementById('text').disabled,
+        micDisabled: p.getElementById('mic').disabled,
+        banner: p.getElementById('banner').hidden ? null : p.getElementById('banner').textContent,
+        start: p.getElementById('start').textContent,
+      };
+    },
+  };
+</script>
