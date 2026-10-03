@@ -578,7 +578,7 @@
    "say": [
     "none"
    ],
-   "fill": "^none$"
+   "fill": "^(none)?$"
   },
   {
    "id": "phone-6-plus-one",

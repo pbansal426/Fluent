@@ -96,7 +96,7 @@ test('invalid option is not filled and the question stays', async () => {
   await agent.handleUser('es complicado');
   assert.equal(dom.has('f2'), false);
   assert.equal(agent.current.id, 'f2');
-  assert.ok(log.said.at(-1).startsWith(agent.phrases.not_understood)); // and the question follows, asked again
+  assert.ok([agent.phrases.not_understood, agent.phrases.invalid_unsure].some((p) => log.said.at(-1).startsWith(p))); // unsure: nothing written
 });
 
 test('skip, required typed field, and finishing', async () => {

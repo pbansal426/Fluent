@@ -29,7 +29,7 @@ export function spokenEmail(value) {
 }
 
 // A hedge is not an answer to a choice: "maybe", "I think so", "no sé".
-const HEDGE = /\b(maybe|perhaps|probably|i think|i guess|not sure|unsure|i don'?t know|dunno|could be|might be)\b|\b(quiz[aá]s?|tal vez|creo que|no s[eé]|no estoy seguro|puede ser)\b/i;
+const HEDGE = /\b(maybe|perhaps|probably|i think|i guess|not sure|unsure|i don'?t know|dunno|could be|might be|it'?s complicated|complicated|it depends|depends)\b|\b(quiz[aá]s?|tal vez|creo que|no s[eé]|no estoy seguro|puede ser|es complicado|depende)\b/i;
 
 // "1 million" -> "1000000", "2.5 mil" -> "2500": a number the user said with a scale word, written as digits.
 const SCALES = { k: 1e3, thousand: 1e3, mil: 1e3, miles: 1e3, million: 1e6, millon: 1e6, millones: 1e6, billion: 1e9, billon: 1e9, billones: 1e9 };
@@ -79,6 +79,12 @@ export function validateValue(field, value, said = '') {
   if (v && isNumeric(field) && !['checkbox', 'radio', 'select', 'date'].includes(field.kind) && HEDGE.test(said)) return { ok: false, reason: 'unsure', phrase: 'invalid_unsure' };
   if (v && field.kind === 'date' && said && !MONTH_WORDS.test(said) && !NUMERIC_DATE.test(said)) return { ok: false, reason: 'incomplete-date', phrase: 'invalid_date' };
   if (v && ['checkbox', 'radio', 'select'].includes(field.kind) && HEDGE.test(said)) return { ok: false, reason: 'unsure', phrase: 'invalid_unsure' };
+  if (v && ['radio', 'select'].includes(field.kind) && (field.options || []).length > 1) {
+    // "married and single": two different choices were named, so none can be chosen for them.
+    const heard = ` ${wordsOf(said)} `;
+    const named = field.options.filter((o) => wordsOf(o).length >= 3 && heard.includes(` ${wordsOf(o)} `));
+    if (named.length >= 2) return { ok: false, reason: 'two-choices', phrase: 'invalid_unsure' };
+  }
   if (!v || field.kind === 'checkbox' || field.kind === 'radio' || field.kind === 'select' || field.kind === 'date') return { ok: true, value: v };
   // One letter is an answer only for an initial, or when that letter is all the user said.
   if (/^\p{L}\.?$/u.test(v) && !/initial|inicial/i.test(field.label || '') && wordsOf(said).split(' ').length > 2) return { ok: false, reason: 'letter', phrase: 'invalid_letter' };
@@ -88,6 +94,8 @@ export function validateValue(field, value, said = '') {
 
   if (isEmail(field)) {
     const email = spokenEmail(v);
+    const ending = email.split('.').pop().toLowerCase();
+    if (said && /@/.test(email) && !new RegExp(`\\b${ending}\\b`, 'i').test(said) && !said.includes('@')) return { ok: false, reason: 'email', phrase: 'invalid_email' }; // an ending nobody said
     return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && !/\b(first|last)name\b/i.test(email)
       ? { ok: true, value: email }
       : { ok: false, reason: 'email', phrase: 'invalid_email' };

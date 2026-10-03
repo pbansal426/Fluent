@@ -112,6 +112,19 @@ test('a street address needs words, not only a number', () => {
   assert.equal(validateValue(f('Email address'), 'a@b.com', 'a@b.com').ok, true); // an email field is not an address field
 });
 
+test('two named choices, "it\'s complicated", and an email ending nobody said are not accepted', () => {
+  const marital = f('Marital status', { kind: 'select', options: ['Single', 'Married', 'Divorced', 'Widowed'] });
+  assert.equal(validateValue(marital, 'Married', 'married and single').phrase, 'invalid_unsure');
+  assert.equal(validateValue(marital, 'Divorced', "it's complicated").phrase, 'invalid_unsure');
+  assert.equal(validateValue(marital, 'Married', 'I am married').ok, true);
+  const email = f('Email address');
+  assert.equal(validateValue(email, 'maria@gmail.com', 'maria at gmail').phrase, 'invalid_email');
+  assert.equal(validateValue(email, 'maria@gmail.com', 'maria at gmail dot com').ok, true);
+  assert.equal(validateValue(email, 'maria@gmail.com', 'maria arroba gmail punto com').ok, true);
+  assert.equal(validateValue(email, 'maria@gmail.com', 'maria@gmail.com').ok, true);
+  assert.equal(validateValue(email, 'ana-lopez@gmail.com', 'ana dash lopez at gmail dot com').ok, true);
+});
+
 test('choices, dates and checkboxes are left to their own matching', () => {
   for (const kind of ['checkbox', 'radio', 'select', 'date']) assert.equal(validateValue(f('Email address', { kind }), 'yes', '').ok, true);
 });
