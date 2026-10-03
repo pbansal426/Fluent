@@ -17,6 +17,8 @@ export const PHRASES = {
   tab_chat: 'Chat',
   tab_form: 'Form',
   next_page: 'That page is done. Now we go to the next page.',
+  away_note: 'Fluent is helping with a different tab. Go back to that tab to keep going, or start here.',
+  btn_back_tab: 'Go back to that tab',
   still_there: 'Are you still there? Let me ask again.',
   not_understood: 'Sorry, I did not understand. Can you say it a different way?',
   empty_required: 'This one is needed, and it is still empty.',

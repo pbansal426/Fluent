@@ -97,3 +97,5 @@ label.check[hidden], button.icon[hidden] { display: none !important; }
 #form-view .frow { display: grid; gap: 4px; }
 #form-view label { font-size: 13px; font-weight: 600; }
 #form-view input:not([type="checkbox"]), #form-view select, #form-view textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border-radius: 8px; }
+
+#back-tab[hidden], #away-note[hidden] { display: none; }

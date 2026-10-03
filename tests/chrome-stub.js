@@ -29,11 +29,17 @@
       },
     },
     tabs: {
-      query: async () => [{ id: 1, url: pageFrame().contentWindow.location.href }],
-      update: async (_tabId, { url }) => void (pageFrame().src = url),
+      query: async () => [{ id: window.parent.SIM_ACTIVE_TAB || 1, url: pageFrame().contentWindow.location.href }],
+      update: async (tabId, props) => {
+        if (props.url) pageFrame().src = props.url;
+        if (props.active) window.parent.SIM_TAB_UPDATES = [...(window.parent.SIM_TAB_UPDATES || []), tabId];
+      },
       sendMessage: async (_tabId, msg) => routes[msg.type]?.(msg),
       create: ({ url }) => console.log('would open tab', url),
       onUpdated: noopEvent,
+      // Tests switch tabs with window.parent.SIM_ACTIVATE(tabId).
+      onActivated: { addListener: (fn) => (window.parent.SIM_ACTIVATE = (tabId) => fn({ tabId })) },
+      onRemoved: noopEvent,
     },
     scripting: {
       executeScript: async ({ files }) => {

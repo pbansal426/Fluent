@@ -44,6 +44,8 @@ const state = {
   speakStart: 0,
   falseBarges: 0,
   view: 'chat', // chat | form
+  away: false, // the user is on another tab: this session stays hidden and quiet
+  resumeVoice: false,
 };
 
 const lang = () => LANGUAGES.find((l) => l.code === state.settings.lang) || LANGUAGES[0];
@@ -130,8 +132,13 @@ function filledBubble(items) {
 
 function render() {
   const p = state.phrases;
-  const started = !!state.agent;
+  const started = !!state.agent && !state.away;
   const formView = started && state.view === 'form';
+  const awayFromForm = !!state.agent && state.away;
+  $('away-note').hidden = !awayFromForm;
+  $('back-tab').hidden = !awayFromForm;
+  $('away-note').textContent = p.away_note;
+  $('back-tab').textContent = p.btn_back_tab;
   $('welcome').hidden = started;
   $('chat').hidden = !started || formView;
   $('composer').hidden = !started || formView;
@@ -288,7 +295,7 @@ const ui = {
   },
   async say(text) {
     bubble('agent', text);
-    if (!state.settings.speak || state.skipSpeech) return;
+    if (!state.settings.speak || state.skipSpeech || state.away) return;
     state.speaking = true;
     state.speakStart = performance.now();
     state.live?.arm(!state.muted && !state.bargeOff); // the user may now talk over the assistant
@@ -362,7 +369,7 @@ function phrasesFor(llm) {
     phraseJobs.set(
       code,
       (async () => {
-        const key = `phrases:v6:${code}`; // bump when PHRASES changes
+        const key = `phrases:v7:${code}`; // bump when PHRASES changes
         const cached = (await chrome.storage.local.get(key))[key];
         if (cached && Object.keys(PHRASES).every((k) => cached[k])) return cached;
         const phrases = await translatePhrases(llm, name);
@@ -376,6 +383,7 @@ function phrasesFor(llm) {
 }
 
 async function start() {
+  if (state.agent) await reset(); // starting here replaces the session of another tab
   banner('');
   await saveSettings();
   const llm = client();
@@ -413,7 +421,7 @@ async function reset() {
   speech.stopListening();
   closeLive();
   state.send?.({ type: 'fluent:clear' }).catch(() => {});
-  Object.assign(state, { view: 'chat', agent: null, send: null, mode: 'idle', field: null, busy: false, queue: [], pendingRescan: false, pageListen: false, voiceOn: false, muted: false, listening: false, speaking: false, skipSpeech: false, phrases: { ...PHRASES } });
+  Object.assign(state, { away: false, view: 'chat', agent: null, send: null, mode: 'idle', field: null, busy: false, queue: [], pendingRescan: false, pageListen: false, voiceOn: false, muted: false, listening: false, speaking: false, skipSpeech: false, phrases: { ...PHRASES } });
   banner('');
   render();
 }
@@ -516,7 +524,7 @@ const MAX_SILENT_ROUNDS = 6; // how many times to keep listening through silence
 
 // byUser: the user tapped the mic (so it is fine to open the permission tab); otherwise hands-free.
 async function listenOnce(byUser = false) {
-  if (state.listening || state.busy || state.mode !== 'listen') return;
+  if (state.listening || state.busy || state.away || state.mode !== 'listen') return;
   const token = ++state.listenToken;
   const problem = await micProblem();
   if (token !== state.listenToken) return;
@@ -713,6 +721,36 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     if (state.agent && state.mode === 'listen' && !state.listening) toggleMic();
   }
 });
+
+// A session belongs to the tab it started on. On any other tab it is hidden and silent, so the user is
+// never shown (or spoken to about) a form that is not in front of them; coming back restores it.
+function goAway() {
+  if (state.away) return;
+  state.away = true;
+  state.resumeVoice = state.voiceOn;
+  state.voiceOn = false;
+  cancelListening();
+  speech.stopSpeaking();
+  state.live?.arm(false);
+  render();
+}
+function comeBack() {
+  if (!state.away) return;
+  state.away = false;
+  state.voiceOn = state.resumeVoice && !state.muted;
+  render();
+  renderFormView();
+  if (state.voiceOn && state.mode === 'listen' && !state.busy) listenOnce();
+}
+chrome.tabs.onActivated?.addListener(({ tabId }) => {
+  if (!state.agent) return;
+  if (tabId === state.tabId) comeBack();
+  else goAway();
+});
+chrome.tabs.onRemoved?.addListener((tabId) => {
+  if (tabId === state.tabId && state.agent) reset();
+});
+$('back-tab').addEventListener('click', () => chrome.tabs.update(state.tabId, { active: true }));
 
 // The page was reloaded or navigated: the old conversation no longer matches it.
 chrome.tabs.onUpdated.addListener((tabId, info) => {
