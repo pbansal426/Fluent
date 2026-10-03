@@ -7,6 +7,18 @@ Fill out any web form in your own language. Fluent translates the form in place 
 `npm run demo`, then open <http://localhost:8765/demo/app/>. The form is on the left and the same Fluent sidebar on the right.
 **Upload a PDF form** with the button (or drop a file on the page), or pick a sample. The server also forwards the AI requests, so LM Studio (or a cloud key pasted in the sidebar's settings) works from an ordinary web page; allow the microphone when the browser asks. Add `?lang=es` to the address to start in another language.
 
+### Sharing the demo on a public link
+
+1. Create an OpenRouter key **with a spending cap** (a few dollars is plenty) and keep it only in your terminal:
+   `export OPENROUTER_API_KEY=sk-or-...`
+2. `npm run demo` (same terminal). It prints "shared OpenRouter key on".
+3. In a second terminal, share it: `ssh -R 80:127.0.0.1:8765 nokey@localhost.run`, or `brew install cloudflared` and
+   `cloudflared tunnel --url http://127.0.0.1:8765`. Paste the `https://…` link it prints into Devpost.
+
+Visitors need no key. The server keeps your key private, pins visitors to one model (`DEMO_MODEL`), caps reply length,
+rate-limits each visitor, serves only the demo and sample forms, never forwards to anything but AI providers, and never logs
+a visitor's conversation. The link works while your laptop is awake and the demo is running. Use Chrome (speech recognition).
+
 ## Run it (as a Chrome extension)
 
 1. **LM Studio:** start the local server (Developer tab → Start Server) with `google/gemma-4-e4b` loaded. Default endpoint: `http://localhost:1234/v1`.
