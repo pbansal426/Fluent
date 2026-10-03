@@ -1,6 +1,28 @@
 # Fluent — handoff
 
-Written 2026-10-03 (late night of Fri 2026-10-02) for whoever picks this up next. Read this first, then `docs/superpowers/specs/2026-10-02-fluent-design.md` and `README.md`.
+Updated 2026-10-03 at the owner's request to hand off immediately. Read this first, then `docs/superpowers/specs/2026-10-02-fluent-design.md` and `README.md`. Prefer small, safe changes; deadline is today at 5:15 PM CDT.
+
+## 0. Immediate takeover state
+
+The owner requested three tasks, in order. **Tasks 1 and 2 have committed implementations and automated verification. Task 3 has not been implemented.** The owner then requested this immediate handoff; do not mistake it for completion of all requested work.
+
+1. **Typed chat bug:** reproduced before changing production code in headless Chrome running the real panel. With speech deliberately held open, `state.busy` disabled the composer; a submitted message cleared the input without a user bubble, reply, or error. Fixed by accepting/queuing typed turns, interrupting speech, and explicitly settling cancelled speech/recognition promises. Typing pauses hands-free listening; tap the mic to resume. Private-field panel input remains blocked. Added request/recognition timeouts and transcript feedback for AI errors. Commit: `78328bb`.
+2. **One language choice:** detection runs before greeting/translation, displays `Form language: Spanish` (or the detected language), and skips translations/badges when it matches the user's language. Uses HTML `lang` when valid; otherwise model detection from scanned labels/options/sections, without field values. PDF language metadata is collected but validated against labels: **the Spanish W-2 incorrectly declares English in its catalog**. Trusting that metadata initially failed the PDF language check (10/11); validation fixed it (11/11). Commit: `aa5ad9b`.
+3. **User-directed assistant:** still outstanding. `prompts.js` and the three tools (`fill_fields`, `skip_field`, `ask_user`) are unchanged. Agent still walks fields in order. Implement navigation/back, clear, section navigation/skip, readback/remaining, explicit copying from nonprivate fields, and multi-answer/pasted-details cases. Keep code enforcing privacy and interpret-only rules. Retain/extend `Agent.inventedNumber`, require unanswered fields to stay empty, keep the prompt/tool set small, and rerun **both** real-model end-to-end cases after every prompt change. A proposed patch for this task was rejected by `apply_patch` before application; no partial tool/prompt changes landed.
+
+**Working tree intentionally has unfinished follow-up changes. Preserve and inspect them:**
+
+- `extension/panel/panel.js`: additional no-form recovery: after an empty scan, show the no-form banner and keep Start available instead of leaving a chat that silently ignores messages. **Not independently regression-tested yet.**
+- `tests/chrome-stub.js`: optional `SIM_BOOT` setup for deterministic failure tests; missing page handlers return `undefined`, like an older content script.
+- `tests/speech.test.js`: an additional timeout test.
+- New `tests/listen.test.js`: page-side recognition cancellation/error tests.
+- New `tests/panel-mic-failures.js`: deterministic pending microphone, pending recognition, and missing content-script handler tests. Latest run **7/7 passed**; an earlier run failed because the test clicked the previous iframe document while reloading. The script now awaits the iframe's load event.
+
+These follow-ups are **not included in the two implementation commits**. This handoff commit documents them without committing unverified production follow-ups. No model was loaded, unloaded, or restarted. No git remote exists.
+
+**Latest owner observation / critical demo instruction:** the owner showed a screenshot with the form on the left, a simulator panel in the middle, and the real extension on the right. They explicitly said not to simulate the extension in the page. The middle column is `tests/panel-sim.html`'s iframe, not a second extension panel. The real extension reported no form because the simulator embeds the form in an iframe and Fluent does not scan iframes. **Use `http://localhost:8765/demo/intake.html` for the owner's actual Chrome demo, with only the real side panel.** This standalone URL was opened for the owner. Keep the simulator for automated tests only; do not open it as the owner's demo. The screenshot's right panel had the older emoji mic and lacked the hands-free setting, suggesting a stale loaded extension; the owner was instructed to reload Fluent in `chrome://extensions` and reload the form tab. No confirmation has arrived.
+
+**Owner's hands still needed:** reload the unpacked extension and standalone form tab; test typed interruption while speech is playing; tap the mic, allow it in the permission tab if prompted, tap again, and report whether a nonprivate spoken answer transcribes. If it fails, report the exact yellow note and panel Console error. **Real microphone/voice remains unverified.**
 
 ## 1. What this is and the deadline
 
@@ -15,7 +37,7 @@ Written 2026-10-03 (late night of Fri 2026-10-02) for whoever picks this up next
 ## 2. Where things live
 
 - Repo: `~/Dev/Fluent`, branch `main`, **no git remote** (nothing is pushed anywhere).
-- A git worktree at `.claude/worktrees/fluent-extension` (branch `worktree-fluent-extension`) holds the same commits. Safe to delete: `git worktree remove .claude/worktrees/fluent-extension`.
+- A git worktree at `.claude/worktrees/fluent-extension` (branch `worktree-fluent-extension`) exists from the earlier session; main has since advanced. Do not assume that worktree contains the latest changes.
 - Not in git (`.gitignore` has `*.pdf`): `fw2.pdf` (English W-2), `fw2_es.pdf` (Spanish W-2, the PDF demo form; `fw2_spanish.pdf` is an identical copy), `HackthonInstructions.pdf`.
 - The extension the user has loaded in Chrome is the unpacked folder `~/Dev/Fluent/extension`. After any code change: reload it in `chrome://extensions` and reload the form tab.
 
@@ -36,7 +58,7 @@ Written 2026-10-03 (late night of Fri 2026-10-02) for whoever picks this up next
 | Scope | Web forms + fillable PDFs. Scanned PDFs / OCR cut. | ~19 hours to deadline; the judged artifact is a 2-minute video. |
 | Demo | Owner wants **`fw2_es.pdf` (Spanish W-2), user speaking English**. A web demo (`demo/intake.html`, Spanish speaker on an English patient form) also works. | Owner's choice. Caveat raised and not resolved: a W-2 is filled by employers, not workers, so it is a weak story for judges; the patient-intake demo is the more credible one. |
 | Voice engine | Chrome Web Speech API (recognition + synthesis), turn-based. | Free, no setup, many languages. Audio goes to Google, one more reason sensitive fields are typed. |
-| Model | `google/gemma-4-e4b` with `reasoning_effort: "none"`. | Measured 0.4–2.6 s per turn with correct tool calls. With thinking on, 14–30 s. `qwen/qwen3.8-27b` is loaded too but skips tool calls with thinking off and is slower. Other models are not loaded; do not load them. |
+| Model | `google/gemma-4-e4b` with `reasoning_effort: "none"`. | Earlier measurements: 0.4–2.6 s per turn with correct tool calls; 14–30 s with thinking on. Latest runs have occasional longer turns. The server lists other models too; do not change model loading or restart LM Studio. |
 | Agent shape | Code owns question order and privacy rules; the model only translates and interprets. | Reliable on a small local model. |
 | Build | Plain ES modules, no build step, Manifest V3. | Load unpacked, fastest iteration. |
 | PDF | Own viewer page using vendored pdf.js 4.10.38 with form rendering. | Chrome's built-in PDF viewer cannot be scripted. pdf.js turns PDF fields into HTML inputs, so the web pipeline is reused. |
@@ -58,6 +80,7 @@ extension/
     agent.js     the conductor: translate in chunks, ask next unfilled field, one model call per turn
                  with tools fill_fields / skip_field / ask_user, read back, privacy + interpret-only guards
     sensitive.js which fields must be typed (English and Spanish patterns)
+    language.js  metadata/label language detection before the conversation starts
     prompts.js   every prompt, tool schema and fixed phrase
     speech.js    Web Speech wrapper + the language list
   panel/     side panel UI (panel.html/.css/.js) and the one-time mic permission tab (permission.*)
@@ -67,7 +90,7 @@ tests/                           see section 7
 docs/superpowers/specs/...       design doc
 ```
 
-How a session runs: panel Start → `connect(tab)` (inject content scripts into a web page, or reopen a PDF tab in `pdf/viewer.html` and talk to it with runtime messages) → scan → classify sensitive/long → greet → background translation (first chunk of 4 fields, then 10 at a time, then surrounding text) → loop: highlight field → speak a natural question → listen → model tool calls → fill → read back → next field.
+How a session runs: panel Start → `connect(tab)` (inject content scripts into a web page, or reopen a PDF tab in `pdf/viewer.html` and talk to it with runtime messages) → scan → classify sensitive/long → detect/display form language → greet → background translation (first chunk of 4 fields, then 10 at a time, then surrounding text; skipped for matching languages) → loop: highlight field → speak a natural question → listen → model tool calls → fill → read back → next field. Typed turns interrupt speech and queue while earlier model work finishes; stale recognition results are ignored.
 
 PDF specifics (`pdf/viewer.js`, `pdf/labels.js`):
 - Starts on the first page with editable fields (page 3 of the W-2; page 2, Copy A, is read-only).
@@ -78,14 +101,16 @@ PDF specifics (`pdf/viewer.js`, `pdf/labels.js`):
 
 ## 6. Current state: what is verified and what is not
 
-Verified in **headless Chrome against the real LM Studio model** (not in the owner's Chrome):
+Latest verification during this takeover:
 
-- Unit tests: 26/26.
-- Page scripts on the demo web form: 25/25.
-- PDF viewer on `fw2_es.pdf`: 13/13 (46 fields labelled, fill, mirroring, values read back from the saved PDF).
-- Full conversation, Spanish speaker on the English web form: 8/8, median about 1.4 s per turn.
-- Full conversation, English speaker on the Spanish W-2: 11/11, including "nothing invented when the user gave no answer" and "SSN never sent to the model".
-- The real panel code in a simulator page (chrome.* stubbed): 6/6 on the web form and 6/6 on the PDF.
+- `npm test`: **34/34 passed**, including the currently uncommitted page-recognition and timeout tests. This was run before the small no-form panel follow-up.
+- Real-model end-to-end, Spanish speaker on English web form: **8/8**, including detection. Full output: `/tmp/fluent-language-web.log`.
+- Real-model end-to-end, English speaker on Spanish W-2: **11/11**, including label detection overriding incorrect PDF metadata, unanswered fields staying empty, and SSN never sent to the model. Full output: `/tmp/fluent-language-pdf.log`.
+- Deterministic real-panel interruption/queue regression: **6/6**, after language detection changes. `tests/panel-interruption.js` uses model/speech doubles, so this proves panel behavior, not real voice or model quality.
+- Deterministic real-panel microphone failure recovery: **7/7** in the latest run, including typed replies with pending mic permission, recognition that never ends, and an older content script missing `fluent:listen`. Test file and stub changes are uncommitted.
+- Existing real-model web panel walkthrough: **6/6** after the first chat fix, before language changes. Both panel walkthrough scripts now have an extra language-display assertion but have **not been rerun with those assertions**.
+
+Earlier session's checks, **not rerun during this takeover**: page scripts **25/25**, PDF viewer/save **13/13**, PDF panel walkthrough **6/6**. Do not describe these as verification of the latest working tree. Rerun the complete suite before declaring the original task finished.
 
 **NOT verified — the biggest risk:**
 
@@ -107,9 +132,15 @@ node tests/run-harness.mjs "http://127.0.0.1:8765/tests/e2e.html"             # 
 node tests/run-harness.mjs "http://127.0.0.1:8765/tests/e2e.html?case=w2"     # real model, W-2 PDF, English
 node tests/run-harness.mjs http://127.0.0.1:8765/tests/panel-sim.html shot.png @tests/panel-walkthrough.js
 node tests/run-harness.mjs "http://127.0.0.1:8765/tests/panel-sim.html?page=/fw2_es.pdf&lang=en" shot.png @tests/panel-walkthrough-pdf.js
+
+# Deterministic panel regressions (model/speech doubles, not real microphone verification):
+node tests/run-harness.mjs "http://127.0.0.1:8765/tests/panel-sim.html?lang=en" /tmp/fluent-chat.png @tests/panel-interruption.js
+node tests/run-harness.mjs "http://127.0.0.1:8765/tests/panel-sim.html?lang=en" /tmp/fluent-mic-failures.png @tests/panel-mic-failures.js
 ```
 
-`tests/run-harness.mjs` drives headless Chrome over the DevTools protocol (Chrome's `--dump-dom` hangs on this version). It starts Chrome with web security off in a throwaway profile so test pages can call LM Studio, which sends no CORS headers; the real extension does not need that because it has host permissions. Pass a PNG path to get a screenshot. `tests/panel-sim.html` is the real panel next to a form in an ordinary tab and is the fastest way to work on the panel.
+`tests/run-harness.mjs` drives headless Chrome over the DevTools protocol (Chrome's `--dump-dom` hangs on this version). It starts Chrome with web security off in a throwaway profile so test pages can call LM Studio, which sends no CORS headers; the real extension does not need that because it has host permissions. Pass a PNG path to get a screenshot. The runner now chooses an isolated debugging port and returns a failing exit code for failed scripted checks or evaluation exceptions (previously screenshots could mask failures). Run real-model cases serially to avoid piling work onto the shared GPU. `tests/panel-sim.html` is for automated panel development/testing; **do not use it for the owner's real-extension demo**.
+
+At handoff, the `npm run demo` server is still running on port 8765 (Python PID 9632). No harness/model test run remains active. Check the port before starting a duplicate server.
 
 Manual demo in Chrome:
 - Web: open `http://localhost:8765/demo/intake.html`, open the Fluent panel, pick Español, press the start button.
@@ -117,6 +148,11 @@ Manual demo in Chrome:
 
 ## 8. Known issues and rough edges
 
+- **User-directed tools are still missing:** original task 3 remains outstanding; see section 0.
+- **No-form recovery follow-up needs verification:** uncommitted panel change keeps Start available after an empty scan. Add a regression and inspect its interaction with queued text before committing.
+- **Privacy for pasted blocks needs hardening when adding task 3:** current protection blocks input during private fields and omits those field values from model context; arbitrary sensitive values pasted while a nonprivate field is current are not automatically redacted. Do not send such values to the model when extending multi-answer input/copying.
+- **PDF language metadata can be wrong:** the Spanish W-2 says English. Detection now verifies PDF hints using labels; do not revert to trusting the viewer's English `lang` or PDF metadata alone.
+- **Same-language assistance** currently uses the original labels/options without model-generated translation questions. Unit-tested; still needs a real-extension owner check.
 - **Model quality (gemma e4b is small).** Occasional wrong translations or explanations: "statutory employee" explained as a government employee; "Social security tax withheld" shortened to "SE tax withheld"; "Maria E. Lopez" sometimes puts "E" in the suffix box; one sentence sometimes fills only the first of several fields (it then just asks for the next one). A larger model would help but must not be loaded without the owner's say-so.
 - **The interpret-only prompt is a balance.** Too strict and the model answers "skip" with "which field?" or refuses to fill several fields at once. The current wording in `prompts.js` (`turnSystemPrompt`) was tuned against both end-to-end cases; rerun them after any prompt change.
 - **Interpret-only number guard is partial.** `Agent.inventedNumber` only catches invented numbers of 3+ digits, and only when the user's words contain digits. Invented text (a made-up name) is prevented only by the prompt.
@@ -125,15 +161,16 @@ Manual demo in Chrome:
 - **State ID number** on the W-2 is treated as private (typed); stricter than needed.
 - **First start per language** translates the assistant's fixed phrases (about 8 s), then caches them in `chrome.storage.local` under `phrases:v3:<code>`. Bump the version in `panel.js` whenever `PHRASES` in `prompts.js` changes.
 - **Voice is turn-based, not full-duplex.** It listens automatically after speaking and can be interrupted by tapping the mic, but not by talking over it: Chrome's recogniser would hear the assistant's own voice. Real barge-in needs a streaming speech model (for example OpenAI Realtime), which does not run on LM Studio.
-- The slow first translation chunk and concurrent background translation can make an occasional turn take 7–10 s.
+- The slow first translation chunk, concurrent background translation, and shared GPU can make occasional turns much slower (latest web run included ~18 s). AI requests now time out at 60 s; model-list requests at 10 s; recognition at ~20–22 s; mic permission check at 3 s.
 - No extension icon files yet (Chrome shows a default letter icon).
 
 ## 9. Suggested next steps, in order
 
-1. Get the owner's result from a real mic tap and fix whatever the error code shows. This blocks the voice demo.
-2. Decide the demo script for the video (web intake form, W-2 PDF, or both) and rehearse it end to end in real Chrome.
-3. Write the Devpost answers (section 1 lists the required questions). Material: section 4 (decisions), section 5 (how it was built), section 8 (issues overcome), plus next steps: scanned-PDF OCR, streaming voice, hosted model, real-site hardening.
-4. Only if time remains: extension icon, nicer PDF badge sizing, better questions for unlabeled boxes.
+1. Read the working-tree follow-ups in section 0; verify no-form recovery, then commit the follow-ups with clear messages. Preserve the already passing chat and language changes.
+2. Complete original task 3: user-directed filling/navigation/clear/copy/readback/remaining with code-owned privacy. One possible compact design (not implemented): keep the existing tools, extend `fill_fields` with an explicit source field for copying, and add one command tool with a small action enum. Choose the safest small implementation; the owner did not approve a specific schema. Add real-model command cases and rerun both full end-to-end cases after every prompt change.
+3. Run the complete section 7 checks, including both updated panel walkthroughs, page scripts, and PDF saved-value check. Update this handoff and commit on main. Original assignment requested implementation, verification, documentation, and clear local commits; no remote/push.
+4. Get the owner's real-extension typed-chat and microphone results using the standalone demo page, not the simulator. Microphone remains a demo risk until confirmed.
+5. Rehearse the required 2-minute video and finish Devpost answers before 5:15 PM CDT. Earlier submission/demo suggestions remain relevant, but do not spend the remaining time on unrelated polish.
 
 ## 10. Session history (commits on `main`)
 
@@ -141,3 +178,6 @@ Manual demo in Chrome:
 2. `86e4873` End-to-end and panel simulator checks; fixes (history as log, option values pinned, sections).
 3. `22bf28a` Fillable PDF support and the Spanish W-2 demo.
 4. `40f3998` Interpret-only guard, hands-free conversational voice, mic diagnostics, line icons.
+5. `3c37a4f` Original handoff document.
+6. `78328bb` Fix dropped typed turns and release stalled speech and listening.
+7. `aa5ad9b` Detect form language before assistance and skip same-language badges (also strengthens the harness failure reporting and isolates its debugging port).

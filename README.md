@@ -37,7 +37,7 @@ node tests/run-harness.mjs "http://127.0.0.1:8765/tests/e2e.html?case=w2"    # E
 node tests/run-harness.mjs "http://127.0.0.1:8765/extension/pdf/viewer.html?file=/fw2_es.pdf" shot.png @tests/pdf-check.js
 ```
 
-`tests/panel-sim.html` runs the real side panel next to a form in an ordinary tab (chrome.* stubbed).
+`tests/panel-sim.html` runs the real side panel next to a form in an ordinary tab (chrome.* stubbed). It is a test page only. For the real Chrome extension, open `http://localhost:8765/demo/intake.html` directly; opening the simulator alongside the extension shows two panels, and the extension cannot scan the form inside the simulator's iframe.
 
 ## Layout
 
