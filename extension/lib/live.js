@@ -1,21 +1,49 @@
 // Live conversation: one microphone stream kept open for the whole session, so the user can talk over
-// the assistant without tapping anything. Only the detection of "the user started talking" lives here;
-// speech-to-text itself is still Chrome's recogniser (speech.js).
+// the assistant at any moment without tapping anything. Only the detection of "the user started talking"
+// lives here; speech-to-text itself is still Chrome's recogniser (speech.js).
 
-// Pure detector: feed it a loudness reading and a time; it says when real talking started.
-// Loudness must stay above the threshold for `holdMs` (so a click or cough is not talking), and the
-// threshold adapts to the room: a few times the quietest level recently heard.
-export function createVoiceDetector({ sensitivity = 'normal', holdMs = 260, minThreshold = 0.035 } = {}) {
-  const factor = { low: 5, normal: 3.5, high: 2.5 }[sensitivity] || 3.5;
+// Pure detector: feed it a loudness reading and a time; it says once when real talking started.
+//  - Loudness must stay above the threshold for `holdMs` (a click or cough is not talking).
+//  - The threshold follows the room: a few times the quietest level recently heard.
+//  - While the assistant is speaking, the first moments are used to learn how loud the assistant itself is
+//    at the microphone (speaker echo), and the user has to be clearly louder than that.
+//  - desensitize() makes it less eager after a false trigger, so no settings are needed.
+export function createVoiceDetector({ holdMs = 180, minThreshold = 0.03, learnMs = 600, echoMargin = 1.7 } = {}) {
+  const FACTOR = 3.5;
   let floor = 0.01;
   let since = null;
   let fired = false;
+  let armedAt = null;
+  let echoPeak = 0;
+  let boost = 1;
   return {
-    // returns true once per stretch of talking, when it has lasted long enough; false otherwise
+    arm(now) {
+      armedAt = now;
+      echoPeak = 0;
+      since = null;
+      fired = false;
+    },
+    disarm() {
+      armedAt = null;
+      echoPeak = 0;
+      since = null;
+      fired = false;
+    },
+    desensitize() {
+      boost = Math.min(boost * 1.4, 4);
+    },
+    // returns true once per stretch of talking, when it has lasted long enough
     feed(level, now) {
-      const threshold = Math.max(minThreshold, floor * factor);
+      const learning = armedAt != null && now - armedAt < learnMs;
+      const threshold = Math.max(minThreshold * boost, floor * FACTOR, echoPeak * echoMargin);
+      if (learning) {
+        // Whatever the microphone hears now is mostly the assistant's own voice.
+        echoPeak = Math.max(echoPeak, level * 0.9);
+        since = null;
+        return false;
+      }
       if (level < threshold) {
-        floor = floor * 0.95 + level * 0.05; // follow the room's noise, slowly
+        if (armedAt == null) floor = floor * 0.95 + level * 0.05; // follow the room's noise, slowly
         since = null;
         fired = false;
         return false;
@@ -27,21 +55,17 @@ export function createVoiceDetector({ sensitivity = 'normal', holdMs = 260, minT
       }
       return false;
     },
-    reset() {
-      since = null;
-      fired = false;
-    },
   };
 }
 
 // Opens the mic once (with echo cancellation, so the assistant's own voice counts for less) and calls
-// onVoice() when the user starts talking while the detector is armed.
-export function createLive({ onVoice, sensitivity = 'normal' } = {}) {
+// onVoice() when the user starts talking while armed (the assistant is speaking).
+export function createLive({ onVoice } = {}) {
   let stream = null;
   let ctx = null;
   let timer = null;
   let armed = false;
-  let detector = createVoiceDetector({ sensitivity });
+  const detector = createVoiceDetector();
 
   async function open() {
     if (stream?.active) return true;
@@ -58,7 +82,6 @@ export function createLive({ onVoice, sensitivity = 'normal' } = {}) {
       let sum = 0;
       for (const v of buf) sum += v * v;
       const level = Math.sqrt(sum / buf.length);
-      // Keep learning the room's noise even while disarmed, but only act when armed.
       if (detector.feed(level, performance.now()) && armed) onVoice?.();
     }, 40);
     return true;
@@ -71,11 +94,10 @@ export function createLive({ onVoice, sensitivity = 'normal' } = {}) {
     },
     arm(on) {
       armed = !!on;
-      detector.reset();
+      if (armed) detector.arm(performance.now());
+      else detector.disarm();
     },
-    setSensitivity(s) {
-      detector = createVoiceDetector({ sensitivity: s });
-    },
+    desensitize: () => detector.desensitize(),
     close() {
       armed = false;
       clearInterval(timer);

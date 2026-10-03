@@ -75,7 +75,7 @@ label.check[hidden], button.icon[hidden] { display: none !important; }
 .mic .ico-wave { display: none; }
 /* armed: hands-free is on.  on: listening right now.  speaking: the assistant is talking (tap to interrupt). */
 .mic.armed { border-color: var(--brand); color: var(--brand); }
-.mic.on { background: #d93025; border-color: #d93025; color: #fff; animation: pulse 1.2s infinite; }
+.mic.on { background: #34a853; border-color: #34a853; color: #fff; animation: pulse 1.2s infinite; }
 .mic.speaking { background: var(--brand); border-color: var(--brand); color: #fff; }
 .mic { position: relative; }
 .mic.muted { opacity: .55; border-style: dashed; }
@@ -88,3 +88,21 @@ label.check[hidden], button.icon[hidden] { display: none !important; }
 :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
 #back-tab[hidden], #away-note[hidden] { display: none; }
+
+/* Voice status, one mic button, tidier composer */
+#chat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+#chat-head .note { margin: 0; }
+#chat-head label.toggle { margin: 0; white-space: nowrap; }
+#live-line { min-height: 22px; display: flex; align-items: center; margin-bottom: 6px; }
+#live-status { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 8px; }
+#live-status:empty { display: none; }
+#live-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+#live-status[data-state="listening"] { color: #34a853; }
+#live-status[data-state="listening"]::before { background: #34a853; animation: pulse 1.2s infinite; }
+#live-status[data-state="speaking"] { color: var(--brand); }
+#live-status[data-state="speaking"]::before { background: var(--brand); }
+#live-status[data-state="muted"] { color: #d93025; }
+#live-status[data-state="muted"]::before { background: #d93025; }
+#live-status[data-state="type"] { color: var(--warn-ink, var(--ink)); }
+.mic.muted { opacity: 1; border-style: solid; border-color: #d93025; color: #d93025; background: transparent; }
+.build { margin-top: 6px; font-size: 10px; color: var(--muted); opacity: .6; text-align: right; }

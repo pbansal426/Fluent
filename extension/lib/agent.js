@@ -26,6 +26,13 @@ const chunks = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_,
 // The part of a form a field belongs to: its section, or the question heading in "Heading: item" labels.
 const headingOf = (f) => (f.label.includes(': ') ? f.label.split(': ')[0] : '');
 const groupOf = (f) => f.section || headingOf(f);
+// "1 million", "2.5 mil", "3k": the number the user meant, as digits, so "1000000" is not mistaken for an invented one.
+const SCALES = { k: 1e3, thousand: 1e3, mil: 1e3, miles: 1e3, million: 1e6, millon: 1e6, millones: 1e6, billion: 1e9, billon: 1e9, billones: 1e9 };
+const scaledNumbers = (said) =>
+  [...String(said).matchAll(/(\d+(?:[.,]\d+)?)\s*(k|thousand|mil|miles|million|mill[oó]n|millones|billion|bill[oó]n|billones)\b/gi)].map((m) => {
+    const scale = SCALES[m[2].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')];
+    return String(Math.round(parseFloat(m[1].replace(',', '.')) * scale));
+  });
 // "Name *:" -> "Name"
 const bare = (label) => label.replace(/[\s*:.]+$/, '');
 // "Name" -> "Name."   "Need help?" -> "Need help?"
@@ -54,6 +61,10 @@ export class Agent {
     this.busy = false;
   }
 
+  log(event, data) {
+    this.ui.log?.(event, data);
+  }
+
   async start() {
     this.ui.status('scan');
     const scan = await this.page.scan();
@@ -70,6 +81,7 @@ export class Agent {
     this.formLang = detected.name;
     this.sameLanguage = detected.code === language(this.userLang)?.code;
     this.ui.language?.(this.formLang, this.sameLanguage);
+    this.log('scan', { formLang: this.formLang, same: this.sameLanguage, fields: this.fields.map((f) => `${f.kind}${f.sensitive ? ' PRIVATE' : ''}: ${f.label}`) });
     for (const f of this.fields) {
       if (!f.value) continue;
       this.filled.add(f.id);
@@ -318,6 +330,7 @@ export class Agent {
       maxTokens: 800,
     });
 
+    this.log('turn', { said, calls: res.toolCalls.map((c) => ({ name: c.name, args: c.args })), content: res.content || undefined, current: this.current?.label });
     const done = [];
     const spoken = [];
     const navLog = [];
@@ -356,6 +369,8 @@ export class Agent {
           this.skipStreak = { group: '', n: 0 };
           this.values.set(field.id, r.value);
           done.push({ id: field.id, label: this.tr(field).label, original: field.label, value: r.value });
+          this.log('fill', { field: field.label, value: r.value });
+          if (field.members && /^(no|none|n\/a|not applicable)$/i.test(r.value)) this.skipDependents(field);
           progressed = true;
         }
       } else if (call.name === 'skip_field') {
@@ -465,7 +480,7 @@ export class Agent {
     const digits = (s) => String(s).replace(/\D/g, '');
     const saidDigits = digits(said);
     if (!saidDigits) return false;
-    const known = [saidDigits, ...[...this.values.values()].map(digits)];
+    const known = [saidDigits, ...scaledNumbers(said), ...[...this.values.values()].map(digits)];
     // Compared group by group, so reformatting ("3 de marzo de 1998" -> 1998-03-03, 52000 -> 52,000.00) passes.
     const groups = value.match(/\d{3,}/g) || [];
     return groups.some((group) => !known.some((k) => k.includes(group)));
@@ -546,6 +561,15 @@ export class Agent {
     this.skipped.add(this.current.id);
     if (this.noteSkip(this.current)) await this.ui.say(this.phrases.skipped_group);
     await this.advance();
+  }
+
+  // After "No" to a Yes / No question, the "If you answered Yes, ..." fields that follow do not apply.
+  skipDependents(field) {
+    const DEPENDENT = /\bif\s+(you\s+)?(answered|selected|checked|chose|said)\b|\bif\s+["“]?yes\b|\bif\s+(so|applicable)\b/i;
+    for (let i = this.fields.indexOf(field) + 1; i < this.fields.length && DEPENDENT.test(this.fields[i].label); i++) {
+      this.skipped.add(this.fields[i].id);
+      this.log('skip-dependent', { field: this.fields[i].label });
+    }
   }
 
   // Two skips in a row inside one group of questions ("Other names": family name, given name, middle name)

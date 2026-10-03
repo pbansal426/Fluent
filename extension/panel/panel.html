@@ -21,7 +21,6 @@
   <label>AI key (optional): paste any key from OpenAI, Claude, Gemini, Groq, OpenRouter or xAI and Fluent sets itself up<input id="api-key" type="password" autocomplete="off" spellcheck="false"></label>
   <label class="check"><input id="speak" type="checkbox"> Speak replies aloud</label>
   <label class="check"><input id="live" type="checkbox"> Hands-free conversation (listen automatically after speaking)</label>
-  <label>Talk over the assistant<select id="barge-in"><option value="off">Off (tap the microphone)</option><option value="low">On, low sensitivity (speakers)</option><option value="normal">On, normal</option><option value="high">On, high sensitivity (headphones)</option></select></label>
   <label class="check"><input id="no-think" type="checkbox"> Turn off model "thinking" (much faster)</label>
   <div class="row">
     <button id="save-settings" class="primary small">Save</button>
@@ -43,7 +42,10 @@
   </section>
 
   <section id="chat" hidden>
-    <p id="form-language" class="note" aria-live="polite"></p>
+    <div id="chat-head">
+      <p id="form-language" class="note" aria-live="polite"></p>
+      <label class="check toggle"><input id="show-tr" type="checkbox" checked> <span id="show-tr-label">Show translations</span></label>
+    </div>
     <div id="transcript" aria-live="polite"></div>
     <div id="type-card" hidden>
       <div id="type-text"></div>
@@ -57,10 +59,7 @@
 </main>
 
 <footer id="composer" hidden>
-  <div class="row between">
-    <label class="check toggle"><input id="show-tr" type="checkbox" checked> <span id="show-tr-label">Show translations</span></label>
-    <span id="live-status" class="note" aria-live="polite"></span>
-  </div>
+  <div id="live-line"><span id="live-status" data-state="idle" aria-live="polite"></span></div>
   <div id="interim" class="note" hidden></div>
   <form id="send-form">
     <button id="mic" type="button" class="mic" aria-label="Microphone" title="Microphone">
@@ -75,6 +74,7 @@
       <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
     </button>
   </form>
+  <div id="build" class="build"></div>
 </footer>
 
 <script type="module" src="panel.js"></script>

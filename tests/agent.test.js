@@ -292,6 +292,37 @@ test('two skips in a row inside one group skip the rest of that group', async ()
   assert.deepEqual([...agent.skipped].sort(), ['o0', 'o1', 'o2']);
 });
 
+test('"1 million", "2.5 mil" and "3k" are numbers the user said, not invented ones', async () => {
+  const { agent, dom } = setup([fill(['f1', '1000000']), fill(['f1', '2500']), fill(['f1', '3000']), fill(['f1', '999999'])]);
+  await agent.start();
+  await agent.handleUser('1 million');
+  assert.equal(dom.get('f1'), '1000000');
+  agent.filled.delete('f1');
+  await agent.handleUser('2.5 mil');
+  assert.equal(dom.get('f1'), '2500');
+  await agent.handleUser('3k');
+  assert.equal(dom.get('f1'), '3000');
+  await agent.handleUser('1 million'); // 999999 is still not what was said
+  assert.equal(dom.get('f1'), '3000');
+});
+
+test('after "No" the "If you answered Yes" fields that follow are skipped', async () => {
+  const { agent } = setup([fill(['y', 'No'])]);
+  const fs = [
+    { ...base, id: 'y', kind: 'checkbox', label: 'Have you ever used another date of birth?: Select Yes' },
+    { ...base, id: 'n', kind: 'checkbox', label: 'Have you ever used another date of birth?: Select No' },
+    { ...base, id: 'd1', kind: 'text', label: 'If you answered "Yes," provide all other dates of birth: Enter month' },
+    { ...base, id: 'd2', kind: 'text', label: 'If you answered "Yes," provide all other dates of birth: Enter day' },
+    { ...base, id: 'c', kind: 'text', label: 'City' },
+  ];
+  agent.page.scan = async () => ({ fields: structuredClone(fs), texts: [], pageLang: 'en' });
+  agent.page.fill = async (id, v) => ({ ok: true, value: v });
+  await agent.start();
+  await agent.handleUser('no');
+  assert.equal(agent.current.id, 'c');
+  assert.deepEqual([...agent.skipped].sort(), ['d1', 'd2']);
+});
+
 test('a long PDF: when a page is finished the assistant moves on to the next page, then finishes', async () => {
   const { agent, log } = setup([fill(['f1', 'Ana'])]);
   const pages = [[FIELDS[0]], [{ ...base, id: 'g1', kind: 'text', label: 'City' }]];
