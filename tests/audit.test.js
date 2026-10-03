@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateValue, spokenEmail } from '../extension/lib/audit.js';
+import { validateValue, spokenEmail, plainYesNo } from '../extension/lib/audit.js';
 
 const f = (label, extra = {}) => ({ id: 'x', kind: 'text', label, options: [], ...extra });
 
@@ -76,6 +76,19 @@ test('a date the user only half said is not completed by the model', () => {
   assert.equal(validateValue(dob, '1998-03-03', '03/03/1998').ok, true);
   assert.equal(validateValue(dob, '1998-03-03', '3-3-98').ok, true);
   assert.equal(validateValue(dob, '1998-03-03', '').ok, true); // no sentence to compare with (typed in the Form, copied)
+});
+
+test('a single checkbox becomes true or false from what the user said, never free text', () => {
+  const consent = f('I agree to the terms and conditions', { kind: 'checkbox' });
+  assert.equal(validateValue(consent, 'I agree to the terms and conditions', 'yes I agree').value, 'true');
+  assert.equal(validateValue(consent, 'true', 'yes').value, 'true');
+  assert.equal(validateValue(consent, 'agree', 's\u00ed, estoy de acuerdo').value, 'true');
+  assert.equal(validateValue(consent, 'I disagree', 'no').value, 'false');
+  assert.equal(validateValue(consent, 'something', 'tell me more').phrase, 'invalid_unsure');
+  assert.equal(validateValue(consent, 'yes', 'maybe').phrase, 'invalid_unsure');
+  assert.equal(plainYesNo('I am'), 'Yes');
+  assert.equal(plainYesNo('never'), 'No');
+  assert.equal(plainYesNo('what do you mean?'), null);
 });
 
 test('choices, dates and checkboxes are left to their own matching', () => {

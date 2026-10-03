@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test \"tests/*.test.js\"",
-    "demo": "python3 -m http.server 8765"
+    "demo": "node tools/demo-server.mjs",
+    "corpus": "node tools/run-corpus.mjs"
   }
 }

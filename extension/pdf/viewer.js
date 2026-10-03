@@ -205,6 +205,7 @@ F.savePdf = () => state.doc.saveDocument(); // for tests
 async function openFile(file) {
   if (file) await open(new Uint8Array(await file.arrayBuffer()), file.name);
 }
+F.openFile = openFile; // the demo page hands the viewer a PDF the user picked
 
 $('prev').addEventListener('click', () => { state.pageNum--; render(); });
 $('next').addEventListener('click', () => { state.pageNum++; render(); });

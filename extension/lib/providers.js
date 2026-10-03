@@ -3,7 +3,7 @@
 
 export const PROVIDERS = [
   { id: 'anthropic', name: 'Anthropic (Claude)', test: /^sk-ant-/, baseUrl: 'https://api.anthropic.com/v1', prefer: [/claude-haiku-4-5/, /haiku/, /claude-sonnet-5-5/, /sonnet/] },
-  { id: 'openrouter', name: 'OpenRouter', test: /^sk-or-/, baseUrl: 'https://openrouter.ai/api/v1', prefer: [/^openai\/gpt-4o-mini$/, /^openai\/gpt-4\.1-mini$/, /gemini.*flash/] },
+  { id: 'openrouter', name: 'OpenRouter', test: /^sk-or-/, baseUrl: 'https://openrouter.ai/api/v1', prefer: [/^openai\/gpt-4\.1-mini$/, /^openai\/gpt-4o-mini$/, /^google\/gemini-2\.5-flash$/, /^anthropic\/claude-haiku/, /^google\/gemini.*flash(?!.*(lite|image|preview))/, /^openai\/gpt-/] },
   { id: 'groq', name: 'Groq', test: /^gsk_/, baseUrl: 'https://api.groq.com/openai/v1', prefer: [/llama-3\.3-70b/, /llama.*70b/, /llama/] },
   { id: 'gemini', name: 'Google Gemini', test: /^AIza/, baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', prefer: [/gemini-2\.5-flash$/, /gemini.*flash(?!.*(lite|image|live))/, /gemini/] },
   { id: 'xai', name: 'xAI (Grok)', test: /^xai-/, baseUrl: 'https://api.x.ai/v1', prefer: [/grok.*(fast|mini)/, /grok/] },

@@ -27,19 +27,21 @@ test('without metadata detection uses labels only, never field values', async ()
   assert.match(sent, /Apellido/);
 });
 
-test('same language gets simple questions but no translation badges', async () => {
-  let applies = 0, shown, calls = 0;
+test('same language gets simple questions and descriptions, but no translation badges', async () => {
+  let applies = 0, shown, calls = 0, sentToPage;
   const said = [];
   const agent = new Agent({
     userLang: 'English',
     llm: { chatJson: async ({ messages }) => { if (/what this form is/.test(messages[0].content)) return { overview: 'This is a short form about you.' }; calls++; assert.match(messages[0].content, /already in English/); return { form_language: 'English', fields: [{ id: 'f1', label: 'Simplified label', explanation: 'Your first name.', question: 'What is your first name?', options: [], section: '', english: 'First name' }] }; } },
-    page: { scan: async () => ({ pageLang: 'en-US', fields: [{ id: 'f1', kind: 'text', label: 'First name', options: [] }] }), apply: async () => { applies++; }, highlight: async () => {} },
+    page: { scan: async () => ({ pageLang: 'en-US', fields: [{ id: 'f1', kind: 'text', label: 'First name', options: [] }] }), apply: async (a) => { applies++; sentToPage = a; }, highlight: async () => {} },
     ui: { language: (...args) => { shown = args; }, status() {}, prompt() {}, say: async (t) => void said.push(t) },
   });
   await agent.start();
   await agent.translating;
   assert.deepEqual(shown, ['English', true]);
-  assert.equal(applies, 0);
+  // the page only gets the plain-language description of each field, flagged so it is not shown as a translation
+  assert.equal(applies, 1);
+  assert.equal(sentToPage.fields.every((f) => f.hintOnly === true && f.explanation), true);
   assert.equal(calls, 1);
   assert.equal(agent.tr(agent.fields[0]).label, 'First name'); // the form's own label is kept
   assert.match(said.at(-1), /^What is your first name\?/);

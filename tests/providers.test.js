@@ -20,6 +20,11 @@ test('the model is chosen from what the provider actually lists', () => {
   assert.equal(pickModel(openai, ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1-mini', 'o3']), 'gpt-4.1-mini');
   assert.equal(pickModel(openai, ['o3', 'gpt-4o']), 'gpt-4o');
   assert.equal(pickModel(openai, ['something-new']), 'something-new');
+  const router = detectProvider('sk-or-v1-abc');
+  assert.equal(router.baseUrl, 'https://openrouter.ai/api/v1');
+  assert.equal(pickModel(router, ['meta-llama/llama-3.3-70b-instruct', 'openai/gpt-4o-mini', 'openai/gpt-4.1-mini']), 'openai/gpt-4.1-mini');
+  assert.equal(pickModel(router, ['meta-llama/llama-3.3-70b-instruct', 'google/gemini-2.5-flash']), 'google/gemini-2.5-flash');
+  assert.equal(pickModel(router, ['mistralai/mistral-small']), 'mistralai/mistral-small'); // nothing preferred: the first listed
   const claude = detectProvider('sk-ant-x');
   assert.equal(pickModel(claude, ['claude-sonnet-5-5', 'claude-haiku-4-5-20251001']), 'claude-haiku-4-5-20251001');
   const gemini = detectProvider('AIzaX');

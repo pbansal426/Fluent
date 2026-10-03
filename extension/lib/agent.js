@@ -2,7 +2,7 @@
 // the model only translates and interprets what the user said.
 import { classify, redactPrivate } from './sensitive.js';
 import { groupChoices, matchOption } from './choices.js';
-import { validateValue } from './audit.js';
+import { validateValue, plainYesNo } from './audit.js';
 import { detectLanguage, language } from './language.js';
 import {
   PHRASES,
@@ -149,7 +149,7 @@ export class Agent {
       for (const m of f.members || []) m.id = re(m.id);
     }
     if (this.lastFill) this.lastFill.field_id = re(this.lastFill.field_id);
-    await page.apply({ fields: this.fields.filter((f) => this.translations.has(f.id)).map((f) => ({ id: f.id, ...this.translations.get(f.id) })) });
+    await page.apply({ fields: this.fields.filter((f) => this.translations.has(f.id)).map((f) => this.pagePayload(f)) });
     if (this.current) await page.highlight(this.current.id);
     this.log('relink', { matched: idMap.size, of: incoming.length });
     return idMap;
@@ -166,7 +166,7 @@ export class Agent {
     this.fields = grouped.map((f) => (before.has(f.id) && known.get(f.id)) || f);
     const fresh = this.fields.filter((f) => !this.translations.has(f.id) && !before.has(f.id));
     // The page rebuilt its registry, so translations must be re-attached.
-    await this.page.apply({ fields: this.fields.filter((f) => this.translations.has(f.id)).map((f) => ({ id: f.id, ...this.translations.get(f.id) })) });
+    await this.page.apply({ fields: this.fields.filter((f) => this.translations.has(f.id)).map((f) => this.pagePayload(f)) });
     if (fresh.length) this.translating = this.translateAll(fresh, []);
     if (this.mode === 'done' || !this.current || !this.fields.includes(this.current)) await this.advance();
   }
@@ -237,11 +237,16 @@ export class Agent {
         section: f.section ? (this.sameLanguage ? f.section : t?.section || f.section) : '',
       };
       this.translations.set(f.id, tr);
-      if (!this.sameLanguage) applied.push({ id: f.id, ...tr });
+      applied.push({ id: f.id, ...tr, hintOnly: this.sameLanguage });
       // The privacy rules read English; on a form in another language, check the English label too.
       if (t?.english && !f.sensitive && classify({ ...f, label: t.english }).sensitive) f.sensitive = true;
     }
     if (applied.length) await this.page.apply({ fields: applied });
+  }
+
+  // What the page is given for a field: the translation badge, or (same language) only the description.
+  pagePayload(f) {
+    return { id: f.id, ...this.translations.get(f.id), hintOnly: this.sameLanguage };
   }
 
   tr(field) {
@@ -570,11 +575,7 @@ export class Agent {
   // A plain "yes" / "no" (or "I am", "never", "sí") to a Yes / No question needs no interpreting.
   quickChoice(field, said) {
     if (!field?.members || !/^yes$/i.test(field.options?.[0] || '') || !/^no$/i.test(field.options?.[1] || '')) return null;
-    const t = String(said).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z' ]+/g, ' ').replace(/\s+/g, ' ').trim();
-    if (!t || t.split(' ').length > 8 || /\b(maybe|perhaps|probably|not sure|dont know|don't know|no se|quizas|tal vez|depends|what|why|how)\b/.test(t)) return null;
-    if (/^(no|nope|nah|never|nunca|negative|not really|no way|i am not|i'm not|im not|i do not|i don't|i dont|i have not|i haven't|i havent|i did not|i didn't|i didnt|i was not|i wasn't|para nada)\b/.test(t)) return 'No';
-    if (/^(yes|yeah|yep|yup|sure|of course|correct|right|i am|i'm|im|i do|i have|i did|i was|si|claro|por supuesto|afirmativo|exacto|ya)\b/.test(t)) return 'Yes';
-    return null;
+    return plainYesNo(said);
   }
 
   // Writes a value into a field. A choice drawn as several checkboxes (Yes / No) ticks the chosen one only.

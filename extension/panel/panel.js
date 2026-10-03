@@ -9,7 +9,7 @@ import { createLog } from '../lib/log.js';
 import { createNeuralTts } from '../lib/neural-tts.js';
 
 // Shown at the bottom of the panel, so it is obvious which copy of the extension is running.
-const BUILD = '2026-10-03.11';
+const BUILD = '2026-10-03.12';
 const log = createLog();
 
 const DEFAULTS = {

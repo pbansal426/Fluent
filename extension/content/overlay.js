@@ -10,6 +10,7 @@
 .fluent-badge .fluent-exp{display:none;font-weight:400;color:#35557a}
 .fluent-badge.fluent-current .fluent-exp{display:block}
 .fluent-hidden .fluent-badge{display:none !important}
+.fluent-hint{display:block;margin:3px 0 6px;font:italic 400 12.5px/1.35 system-ui,sans-serif;color:#35557a}
 [data-fluent-current]{outline:3px solid #f59e0b !important;outline-offset:3px;box-shadow:0 0 0 7px rgba(245,158,11,.22) !important;border-radius:6px}
 `;
 
@@ -45,6 +46,18 @@
     const entry = F.registry.get(t.id);
     if (!entry || !t.label) return;
     removeBadge(t.id);
+    // The user already reads the form's language: no translation, only a plain-language description of the field.
+    if (t.hintOnly) {
+      if (!t.explanation || F.pdfReady != null) return; // (PDF captions are printed in place; there is no room to add a line)
+      const h = document.createElement('span');
+      h.className = 'fluent-hint';
+      h.dataset.fluentBadge = t.id;
+      h.dir = 'auto';
+      h.textContent = t.explanation;
+      if (entry.labelNode) entry.labelNode.appendChild(h);
+      else entry.els[0].insertAdjacentElement(entry.els[0].type === 'checkbox' ? 'afterend' : 'beforebegin', h);
+      return;
+    }
     const b = badge(t.label, { explanation: t.explanation, key: t.id });
     if (entry.labelNode) entry.labelNode.appendChild(b);
     else entry.els[0].insertAdjacentElement(entry.els[0].type === 'checkbox' ? 'afterend' : 'beforebegin', b);

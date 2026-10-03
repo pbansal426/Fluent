@@ -48,8 +48,23 @@ const isNumeric = (f) => /wage|salary|income|amount|tax|total|compensation|tips|
 const NUMBER = /^[\s$€£]*-?[\d.,]+\s*$/;
 const NAMEISH_NOISE = /^(yes|no|yeah|yep|nope|ok|okay|sure|s[ií]|vale|hello|hola|thanks|none|n\/a)$/i;
 
+// A plain yes / no in a few words ("yes", "I am", "never", "sí"): 'Yes', 'No', or null when it is anything else.
+export function plainYesNo(said) {
+  const t = String(said || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z' ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t || t.split(' ').length > 8 || /\b(maybe|perhaps|probably|not sure|dont know|don't know|no se|quizas|tal vez|depends|what|why|how)\b/.test(t)) return null;
+  if (/^(no|nope|nah|never|nunca|negative|not really|no way|i am not|i'm not|im not|i do not|i don't|i dont|i have not|i haven't|i havent|i did not|i didn't|i didnt|i was not|i wasn't|para nada)\b/.test(t)) return 'No';
+  if (/^(yes|yeah|yep|yup|sure|of course|correct|right|i am|i'm|im|i do|i have|i did|i was|i agree|agreed|ok|okay|si|claro|por supuesto|afirmativo|exacto|ya|estoy de acuerdo|de acuerdo|acepto)\b/.test(t)) return 'Yes';
+  return null;
+}
+
 export function validateValue(field, value, said = '') {
   const v = String(value ?? '').trim();
+  // A single checkbox is ticked or not; anything else the model writes ("I agree to the terms") is turned into that,
+  // using what the user actually said. Without a clear yes or no nothing is written.
+  if (v && field.kind === 'checkbox' && !field.members && !HEDGE.test(said) && !/^(true|false)$/i.test(v)) {
+    const answer = plainYesNo(said) || plainYesNo(v);
+    return answer ? { ok: true, value: answer === 'Yes' ? 'true' : 'false' } : { ok: false, reason: 'unsure', phrase: 'invalid_unsure' };
+  }
   if (v && field.kind === 'date' && said && MONTH_WORDS.test(said) && !hasDay(said)) return { ok: false, reason: 'incomplete-date', phrase: 'invalid_date' };
   if (v && isNumeric(field) && !['checkbox', 'radio', 'select', 'date'].includes(field.kind) && HEDGE.test(said)) return { ok: false, reason: 'unsure', phrase: 'invalid_unsure' };
   if (v && field.kind === 'date' && said && !MONTH_WORDS.test(said) && !NUMERIC_DATE.test(said)) return { ok: false, reason: 'incomplete-date', phrase: 'invalid_date' };

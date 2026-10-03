@@ -23,6 +23,15 @@ Later the same day:
 - Number guard understands "1 million", "2.5 mil", "3k"; after "No" to a Yes/No question, following "If you answered Yes..." fields are skipped. The Form tab is gone.
 - Open design question for the owner: saving progress when leaving the site (see the session report). Not built.
 
+Evening state (build `2026-10-03.11`) — how to find and fix "intelligence errors" without screenshots:
+- **`tools/run-corpus.mjs`** runs `tests/corpus.json` (~170 tricky utterances: spelled emails/phones, "1 million", hedges, placeholders, injection, pasted secrets, Spanish speakers, multi-field answers, corrections) through the real agent and model, with expected outcomes. `node tools/run-corpus.mjs [id-prefix ...]`, `MODEL=... node tools/run-corpus.mjs`. Last full runs: 162/173, then all 11 failures fixed. **Add a case here for every bug the owner reports, fix it, rerun.**
+- **`lib/audit.js`** holds code-owned guards the model cannot bypass: email (spoken "at/dot" normalised, placeholders rejected), phone (digits, extensions), ZIP (+4 kept), names (no digits/noise/placeholders), dates (day, month and year all required), numbers (a number field needs a number; hedges rejected), choices (hedges rejected), whole-sentence echo, single letters. Rejections are spoken with a fixed phrase (`invalid_*` in `PHRASES`) and logged as `reject`.
+- **Quick Yes/No**: `Agent.quickChoice` answers plain yes/no/"I am"/"never"/"sí" to a Yes/No group in code, no model call.
+- **Logs**: `node tools/log-server.mjs` + `node tools/analyze-log.mjs [--all]`; the panel's flag button ("Report a problem") sends the conversation. The log shows `lost-connection`, `relink`, `reject`, `fill`, `turn` (with timings), `talk-over`, `tab`, `mic` events.
+- **Lost page connection** ("Could not establish connection. Receiving end does not exist."): `connect()` in `panel.js` reinjects the helper script, `Agent.relink()` maps new field ids to old ones by label, shared recovery promise; plain message + clean restart if it fails (`tests/panel-lost.js`).
+- Panel: first message after the greeting is a plain-language overview of the form (`Agent.overview`); typing pauses the mic (`state.typing`), Enter resumes; natural voice: best installed browser voice, or OpenAI TTS when an OpenAI key is pasted (`lib/neural-tts.js`; untested with a real key); slow/busy model now says "busy" instead of "cannot reach".
+- Models: `google/gemma-4-26b-a4b-qat` was loaded by the owner late in the day; default is still `google/gemma-4-e4b` until the corpus has been compared on both (`MODEL=google/gemma-4-26b-a4b-qat node tools/run-corpus.mjs`).
+
 Not done / open:
 - **Model quality**: `google/gemma-4-e4b` still repeats itself on the 3rd–4th help request and is the main quality ceiling. `qwen/qwen3.8-27b` is listed in LM Studio but has not been loaded or tested (shared GPU; owner must say so).
 - Scanned-PDF OCR, iframe scanning, custom (non-`<select>`) dropdowns: not started. Phone/QR web version: roadmap only.

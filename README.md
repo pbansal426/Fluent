@@ -2,7 +2,12 @@
 
 Fill out any web form in your own language. Fluent translates the form in place and a voice assistant asks one question at a time, then fills the fields for you. Sensitive fields (SSN, passport, card numbers) are always typed by you and never sent to the AI.
 
-## Run it
+## Demo page (no extension)
+
+`npm run demo`, then open <http://localhost:8765/demo/app/>. The form is on the left and the same Fluent sidebar on the right.
+**Upload a PDF form** with the button (or drop a file on the page), or pick a sample. The server also forwards the AI requests, so LM Studio (or a cloud key pasted in the sidebar's settings) works from an ordinary web page; allow the microphone when the browser asks. Add `?lang=es` to the address to start in another language.
+
+## Run it (as a Chrome extension)
 
 1. **LM Studio:** start the local server (Developer tab → Start Server) with `google/gemma-4-e4b` loaded. Default endpoint: `http://localhost:1234/v1`.
 2. **Load the extension:** `chrome://extensions` → Developer mode → Load unpacked → pick the `extension/` folder.
