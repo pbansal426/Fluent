@@ -1,0 +1,9 @@
+{
+  "name": "fluent",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "demo": "python3 -m http.server 8765"
+  }
+}

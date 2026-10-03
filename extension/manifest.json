@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Fluent",
+  "description": "Fill out any form in your own language: in-place translation and a voice assistant that fills the fields for you.",
+  "version": "0.1.0",
+  "permissions": ["sidePanel", "storage", "scripting", "activeTab", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "Open Fluent" },
+  "side_panel": { "default_path": "panel/panel.html" }
+}

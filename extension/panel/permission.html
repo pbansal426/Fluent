@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fluent — microphone</title>
+<style>
+  body { font: 18px/1.5 system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; margin: 0; background: #f7f8fa; color: #17202b; }
+  main { max-width: 440px; text-align: center; padding: 24px; }
+  .icon { font-size: 56px; }
+  button { font: inherit; font-weight: 600; padding: 12px 22px; border-radius: 12px; border: 0; background: #1f6feb; color: #fff; cursor: pointer; }
+  #status { margin-top: 16px; color: #5d6b7a; }
+</style>
+</head>
+<body>
+<main>
+  <div class="icon">🎤</div>
+  <p>Fluent needs your microphone so you can answer by speaking. Press the button, then choose <b>Allow</b>.</p>
+  <button id="allow">Allow microphone</button>
+  <p id="status"></p>
+</main>
+<script src="permission.js"></script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!doctype html>
+<!-- Browser check for the page-side scripts. Serve the repo root (npm run demo) and open
+     http://localhost:8765/tests/harness.html — results are printed as JSON below. -->
+<meta charset="utf-8">
+<title>Fluent content-script harness</title>
+<iframe id="page" src="../demo/intake.html" style="width:1000px;height:600px"></iframe>
+<pre id="out">running</pre>
+<script>
+const frame = document.getElementById('page');
+const load = (doc, src) => new Promise((resolve, reject) => {
+  const s = doc.createElement('script');
+  s.src = src; s.onload = resolve; s.onerror = reject;
+  doc.head.appendChild(s);
+});
+frame.addEventListener('load', async () => {
+  const out = { checks: {} };
+  const check = (name, ok, detail) => (out.checks[name] = ok ? 'PASS' : `FAIL ${JSON.stringify(detail)}`);
+  try {
+    const doc = frame.contentDocument;
+    for (const f of ['scan', 'overlay', 'fill', 'content']) await load(doc, `../extension/content/${f}.js`);
+    const F = frame.contentWindow.__fluent;
+    const scan = F.scan();
+    const by = (label) => scan.fields.find((f) => f.label.startsWith(label));
+    out.fields = scan.fields.map((f) => `${f.id} ${f.kind} "${f.label}"${f.options.length ? ' [' + f.options.join('|') + ']' : ''}${f.required ? ' *' : ''}`);
+    out.texts = scan.texts.map((t) => t.text.slice(0, 50));
+
+    check('field count', scan.fields.length === 24, scan.fields.length);
+    check('labels tidied', by('Legal first name').label === 'Legal first name');
+    check('section', by('Full name').section === 'Emergency Contact' && by('Do you have any allergies').section === 'Medical History', scan.fields.map((f) => f.section));
+    check('radio caption', !!by('Do you have any allergies'), out.fields);
+    check('radio options', by('Do you currently smoke')?.options.join() === 'Never,Former user,Current user');
+    check('select options skip placeholder', by('Marital status')?.options.join() === 'Single,Married,Divorced,Widowed');
+    check('required flag', by('Legal first name')?.required === true && by('Email')?.required === false);
+    check('help text', /billing/.test(by('Social Security')?.helpText || ''));
+    check('texts found', scan.texts.some((t) => t.text === 'New Patient Registration') && scan.texts.some((t) => t.text === 'Submit registration'), out.texts);
+
+    const id = (label) => by(label).id;
+    F.apply({
+      fields: [
+        { id: id('Legal first name'), label: 'Nombre legal', explanation: 'Su nombre.', options: [] },
+        { id: id('Marital status'), label: 'Estado civil', explanation: '', options: ['Soltero', 'Casado', 'Divorciado', 'Viudo'] },
+        { id: id('Do you have any allergies'), label: '¿Tiene alergias?', explanation: '', options: ['Sí', 'No', 'No sé'] },
+      ],
+      texts: [{ id: scan.texts[0].id, text: 'Registro' }],
+    });
+    check('badge under label', doc.querySelector('label[for=first] .fluent-badge')?.firstChild.textContent === 'Nombre legal');
+    check('option text translated', doc.querySelector('#marital option:nth-child(3)').textContent === 'Married — Casado');
+    check('radio option badges', doc.querySelectorAll('.q .fluent-inline').length === 3);
+
+    const rescan = F.scan();
+    check('rescan stable ids and clean labels', JSON.stringify(rescan.fields.map((f) => [f.id, f.label, f.options])) === JSON.stringify(scan.fields.map((f) => [f.id, f.label, f.options])));
+
+    const events = [];
+    doc.getElementById('first').addEventListener('input', () => events.push('input'));
+    check('fill text', F.fill(id('Legal first name'), 'María').ok && doc.getElementById('first').value === 'María' && events.length === 1);
+    check('fill date', F.fill(id('Date of birth'), '1998-03-03').ok && doc.getElementById('dob').value === '1998-03-03');
+    check('fill date from prose', F.fill(id('Date of birth'), 'March 3, 1998').ok && doc.getElementById('dob').value === '1998-03-03');
+    const sel = F.fill(id('Marital status'), 'married');
+    check('fill select', sel.ok && sel.value === 'Married' && doc.getElementById('marital').value === 'Married', sel);
+    check('reject bad option', F.fill(id('Marital status'), 'Complicated').ok === false);
+    const radio = F.fill(id('Do you have any allergies'), 'No');
+    check('fill radio', radio.ok && radio.value === 'No' && doc.querySelector('input[name=allergies][value=no]').checked, radio);
+    check('fill radio partial', F.fill(id('Do you currently smoke'), 'former').ok && doc.querySelector('input[name=tobacco][value=former]').checked);
+    check('fill checkbox', F.fill(id('I have read'), 'true').ok && doc.getElementById('consent').checked);
+    check('read', F.read(id('Legal first name')).value === 'María' && F.read(id('Email')).value === '');
+
+    F.highlight(id('Do you have any allergies'));
+    check('highlight radio group', doc.querySelector('[data-fluent-current]')?.classList.contains('q'));
+    F.setVisible(false);
+    check('hide restores options', doc.querySelector('#marital option:nth-child(3)').textContent === 'Married' && getComputedStyle(doc.querySelector('.fluent-badge')).display === 'none');
+    F.clear();
+    check('clear', doc.querySelectorAll('[data-fluent-badge],[data-fluent-current]').length === 0);
+  } catch (e) {
+    out.error = String(e && e.stack || e);
+  }
+  out.summary = `${Object.values(out.checks).filter((v) => v === 'PASS').length}/${Object.keys(out.checks).length} passed`;
+  document.getElementById('out').textContent = JSON.stringify(out, null, 1);
+});
+</script>

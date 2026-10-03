@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fluent</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<header>
+  <div class="brand">Fluent</div>
+  <select id="lang" aria-label="Your language"></select>
+  <button id="settings-btn" class="icon" aria-label="Settings" title="Settings">⚙</button>
+</header>
+
+<section id="settings" hidden>
+  <label>AI endpoint (OpenAI-compatible)<input id="base-url" type="url" spellcheck="false"></label>
+  <label>Model<input id="model" list="models" spellcheck="false"><datalist id="models"></datalist></label>
+  <label>API key (optional)<input id="api-key" type="password" autocomplete="off"></label>
+  <label class="check"><input id="speak" type="checkbox"> Speak replies aloud</label>
+  <label class="check"><input id="no-think" type="checkbox"> Turn off model "thinking" (much faster)</label>
+  <div class="row">
+    <button id="save-settings" class="primary small">Save</button>
+    <button id="grant-mic" class="small">Allow microphone</button>
+    <span id="settings-note" class="note"></span>
+  </div>
+</section>
+
+<div id="banner" hidden></div>
+
+<main>
+  <section id="welcome">
+    <div class="hero">🌐</div>
+    <button id="start" class="primary big"></button>
+    <p class="note" id="welcome-note">Open a page with a form, choose your language above, then press the button.</p>
+  </section>
+
+  <section id="chat" hidden>
+    <div id="transcript" aria-live="polite"></div>
+    <div id="type-card" hidden>
+      <div id="type-text"></div>
+      <div class="row">
+        <button id="continue" class="primary"></button>
+        <button id="translate" hidden></button>
+        <button id="skip"></button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer id="composer" hidden>
+  <label class="check toggle"><input id="show-tr" type="checkbox" checked> <span id="show-tr-label">Show translations</span></label>
+  <div id="interim" class="note" hidden></div>
+  <form id="send-form">
+    <button id="mic" type="button" class="mic" aria-label="Microphone" title="Microphone">🎤</button>
+    <input id="text" type="text" autocomplete="off" dir="auto">
+    <button id="send" class="primary" aria-label="Send">➤</button>
+  </form>
+</footer>
+
+<script type="module" src="panel.js"></script>
+</body>
+</html>
