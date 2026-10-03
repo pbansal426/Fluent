@@ -24,6 +24,15 @@ export const PHRASES = {
   input_placeholder: 'Type your answer…',
   listening: 'Listening…',
   form_changed: 'The form changed. Tap to read it again.',
+  remaining: 'Still to answer:',
+  nothing_left: 'Nothing is left to answer.',
+  cleared: 'Cleared.',
+  typed_private: 'typed by you, kept private',
+  nothing_yet: 'Nothing is filled in yet.',
+  first_question: 'That is the first question.',
+  skipped_section: 'Skipped this section.',
+  copied_nothing: 'I cannot copy that one.',
+  redacted: 'I left out a private number from what you said. Please type private numbers yourself.',
 };
 
 export const TOOLS = [
@@ -31,7 +40,7 @@ export const TOOLS = [
     type: 'function',
     function: {
       name: 'fill_fields',
-      description: 'Write the answers the user gave into the form.',
+      description: 'Write the answers the user gave into the form. To repeat another field\'s answer because the user asked ("same as the first name"), give copy_from instead of value.',
       parameters: {
         type: 'object',
         properties: {
@@ -39,12 +48,27 @@ export const TOOLS = [
             type: 'array',
             items: {
               type: 'object',
-              properties: { field_id: { type: 'string' }, value: { type: 'string' } },
-              required: ['field_id', 'value'],
+              properties: { field_id: { type: 'string' }, value: { type: 'string' }, copy_from: { type: 'string', description: 'id of a field that already has an answer' } },
+              required: ['field_id'],
             },
           },
         },
         required: ['values'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'navigate',
+      description: 'Move around or inspect the form when the user asks to: go back, jump to a field, clear an answer, skip a whole section, hear their answers again, or hear what is left.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['back', 'goto', 'clear', 'skip_section', 'readback', 'remaining'] },
+          field_id: { type: 'string', description: 'for goto and clear; for readback to hear one field only' },
+        },
+        required: ['action'],
       },
     },
   },
@@ -79,7 +103,9 @@ Rules:
 - kind "date": use YYYY-MM-DD. kind "select" or "radio": use exactly one of that field's options. kind "checkbox": use "true" or "false".
 - A short reply with no other context answers the current field.
 - "section" says which part of the form a field belongs to; use it to tell similar fields apart (the patient's name versus an emergency contact's name).
-- If the user corrects an earlier answer, call fill_fields again for that field.
+- If the user corrects an earlier answer, call fill_fields again for that field. If they ask to change a field other than the current one, they mean that field: fill it.
+- When the user asks to go back, go to or change a particular field, clear an answer, skip a section, hear their answers again or hear what is left, call navigate. Use "remaining" for what is left, "readback" for what they have said so far. Only navigate when they ask; an ordinary answer is never a navigate.
+- Copy one field's answer to another only when the user says so ("same as my first name"): call fill_fields with copy_from set to that field's id and no value. Never copy on your own.
 - If the user does not have it, says it does not apply, or wants to skip, call skip_field for the current field.
 - Fields with "private": true must be typed by the user. Never fill them and never ask for their value.
 - If the user asks a question or you need clarification, call ask_user with a short, simple reply in ${userLang}: one or two sentences, no markdown. When they ask what a field means, explain what the form is asking for and where that information is usually found; do not just repeat its name, and do not propose an answer.

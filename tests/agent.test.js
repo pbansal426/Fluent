@@ -20,6 +20,7 @@ function setup(turns) {
     focus: async () => ({ ok: true }),
     fill: async (id, value) => {
       const f = FIELDS.find((x) => x.id === id);
+      if (value === '') return dom.delete(id), { ok: true, value: '' };
       if (f.options.length && !f.options.includes(value)) return { ok: false };
       dom.set(id, value);
       return { ok: true, value };
@@ -132,4 +133,114 @@ test('plain text from the model is spoken as a reply', async () => {
   await agent.handleUser('¿qué significa?');
   assert.equal(log.said.at(-1), 'Es su nombre legal.');
   assert.equal(agent.current.id, 'f1');
+});
+
+const nav = (action, field_id) => ({ content: '', toolCalls: [{ name: 'navigate', args: { action, field_id } }] });
+const copyFrom = (field_id, copy_from) => ({ content: '', toolCalls: [{ name: 'fill_fields', args: { values: [{ field_id, copy_from }] } }] });
+
+test('back and goto re-ask an earlier field; the answer replaces the old one', async () => {
+  const { agent, log, dom } = setup([fill(['f1', 'Ana'], ['f2', 'Single']), nav('back'), fill(['f2', 'Married'])]);
+  await agent.start();
+  await agent.handleUser('Ana, soltera');
+  assert.equal(agent.current.id, 'f3');
+  await agent.handleUser('espera, vuelve');
+  assert.equal(agent.current.id, 'f2');
+  assert.match(log.said.at(-1), /ES:Marital status/);
+  await agent.handleUser('casada');
+  assert.equal(dom.get('f2'), 'Married');
+  assert.equal(agent.current.id, 'f3'); // carries on after the corrected field
+});
+
+test('goto jumps to any field, then the skipped one is picked up again', async () => {
+  const { agent, dom } = setup([nav('goto', 'f2'), fill(['f2', 'Single'])]);
+  await agent.start();
+  await agent.handleUser('primero el estado civil');
+  assert.equal(agent.current.id, 'f2');
+  await agent.handleUser('soltera');
+  assert.equal(dom.get('f2'), 'Single');
+  assert.equal(agent.current.id, 'f3');
+  agent.filled.add('f3'); agent.filled.add('f4');
+  await agent.advance();
+  assert.equal(agent.current.id, 'f1'); // wraps round to what was left behind
+});
+
+test('back at the first question says so', async () => {
+  const { agent, log } = setup([nav('back')]);
+  await agent.start();
+  await agent.handleUser('atrás');
+  assert.equal(log.said.at(-2), agent.phrases.first_question);
+  assert.equal(agent.current.id, 'f1');
+});
+
+test('clear empties a field and asks it again', async () => {
+  const { agent, log, dom } = setup([fill(['f1', 'Ana']), nav('clear', 'f1'), fill(['f1', 'Eva'])]);
+  await agent.start();
+  await agent.handleUser('Ana');
+  assert.equal(dom.get('f1'), 'Ana');
+  await agent.handleUser('borra mi nombre');
+  assert.equal(dom.has('f1'), false);
+  assert.equal(agent.filled.has('f1'), false);
+  assert.match(log.said.find((t) => t.startsWith(agent.phrases.cleared)), /ES:First name/);
+  assert.equal(agent.current.id, 'f2'); // the open question is repeated, not changed
+  await agent.handleUser('Eva, ahora sí');
+  assert.equal(dom.get('f1'), 'Eva');
+});
+
+test('remaining lists what is left; readback hides private values', async () => {
+  const { agent, log, dom } = setup([fill(['f1', 'Ana']), nav('remaining'), nav('readback')]);
+  await agent.start();
+  await agent.handleUser('Ana');
+  await agent.handleUser('¿qué falta?');
+  const left = log.said.find((t) => t.startsWith(agent.phrases.remaining));
+  assert.match(left, /ES:Marital status.*ES:Social Security Number.*ES:Reason for visit/);
+  assert.doesNotMatch(left, /First name/);
+  await agent.handleUser('skip'); // marital status -> the private field comes up
+  assert.equal(agent.current.id, 'f3');
+  dom.set('f3', '123-45-6789');
+  await agent.continueTyped();
+  await agent.handleUser('léeme lo que llevo');
+  const read = log.said.find((t) => t.includes('Ana') && t.includes(agent.phrases.typed_private));
+  assert.match(read, /ES:First name: Ana/);
+  assert.doesNotMatch(JSON.stringify(log.said), /123-45-6789/);
+});
+
+test('skip_section skips the rest of a section only', async () => {
+  const sectioned = FIELDS.map((f, i) => ({ ...f, section: i < 3 ? 'Patient' : 'Visit' }));
+  const { agent } = setup([nav('skip_section')]);
+  agent.page.scan = async () => ({ fields: structuredClone(sectioned), texts: [], pageLang: 'en' });
+  await agent.start();
+  await agent.handleUser('salta esta sección');
+  assert.deepEqual([...agent.skipped].sort(), ['f1', 'f2', 'f3']);
+  assert.equal(agent.current.id, 'f4');
+});
+
+test('copy_from repeats a nonprivate answer; private and empty sources are refused', async () => {
+  const { agent, log, dom } = setup([fill(['f1', 'Ana']), copyFrom('f4', 'f1'), copyFrom('f4', 'f3'), copyFrom('f2', 'f4')]);
+  await agent.start();
+  await agent.handleUser('Ana');
+  await agent.handleUser('en el motivo pon lo mismo que mi nombre');
+  assert.equal(dom.get('f4'), 'Ana');
+  dom.delete('f4'); agent.filled.delete('f4'); agent.values.delete('f4');
+  await agent.handleUser('copia el número de seguro');
+  assert.equal(dom.has('f4'), false);
+  await agent.handleUser('copia el motivo'); // the source is empty now
+  assert.equal(dom.has('f2'), false);
+  assert.ok(log.said.includes(agent.phrases.copied_nothing));
+});
+
+test('private numbers in pasted text never reach the model', async () => {
+  const { agent, log, dom } = setup([fill(['f1', 'Ana'])]);
+  await agent.start();
+  await agent.handleUser('Me llamo Ana, mi seguro social es 123-45-6789 y mi tarjeta 4111 1111 1111 1111');
+  assert.equal(JSON.stringify(log.llmMessages).includes('123-45-6789'), false);
+  assert.equal(JSON.stringify(log.llmMessages).includes('4111'), false);
+  assert.equal(dom.get('f1'), 'Ana');
+  assert.ok(log.said.includes(agent.phrases.redacted));
+});
+
+test('a value containing a redacted placeholder is never written', async () => {
+  const { agent, dom } = setup([fill(['f1', 'Ana [private]'])]);
+  await agent.start();
+  await agent.handleUser('Ana 123-45-6789');
+  assert.equal(dom.has('f1'), false);
 });

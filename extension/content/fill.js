@@ -47,6 +47,20 @@
     if (!entry) return { ok: false, error: 'unknown field' };
     const el = entry.els[0];
 
+    // An empty value clears the field.
+    if (value === '') {
+      if (el.type === 'radio' || el.type === 'checkbox') {
+        for (const r of entry.els) r.checked = false;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      } else if (el.tagName === 'SELECT') {
+        el.selectedIndex = -1;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        setNative(el, '');
+      }
+      return { ok: true, value: '' };
+    }
+
     if (el.type === 'radio') {
       const labels = entry.els.map((r, i) => {
         const node = entry.optionNodes[i];

@@ -249,6 +249,13 @@ async function runTurn(fn) {
     state.busy = false;
     state.speaking = false;
     state.skipSpeech = false;
+    if (state.agent && !state.agent.fields.length) {
+      // A no-form session has nothing to answer. Keep Start available for recovery.
+      banner(state.phrases.no_form, 'info');
+      state.agent = null;
+      state.queue = [];
+      state.voiceOn = false;
+    }
     render();
   }
   if (state.queue.length) {
@@ -274,7 +281,7 @@ function phrasesFor(llm) {
     phraseJobs.set(
       code,
       (async () => {
-        const key = `phrases:v3:${code}`; // bump when PHRASES changes
+        const key = `phrases:v4:${code}`; // bump when PHRASES changes
         const cached = (await chrome.storage.local.get(key))[key];
         if (cached && Object.keys(PHRASES).every((k) => cached[k])) return cached;
         const phrases = await translatePhrases(llm, name);

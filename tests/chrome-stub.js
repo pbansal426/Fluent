@@ -31,7 +31,7 @@
     tabs: {
       query: async () => [{ id: 1, url: pageFrame().contentWindow.location.href }],
       update: async (_tabId, { url }) => void (pageFrame().src = url),
-      sendMessage: async (_tabId, msg) => routes[msg.type](msg),
+      sendMessage: async (_tabId, msg) => routes[msg.type]?.(msg),
       create: ({ url }) => console.log('would open tab', url),
       onUpdated: noopEvent,
     },
@@ -56,4 +56,5 @@
       sendMessage: async (msg) => (routes[msg.type] ? routes[msg.type](msg) : undefined),
     },
   };
+  window.parent.SIM_BOOT?.(window);
 })();

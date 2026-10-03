@@ -48,3 +48,21 @@ export function classify(field) {
   const long = field.kind === 'textarea' || (field.maxLength || 0) > LONG_MAX_LENGTH;
   return { sensitive, long };
 }
+
+// Numbers that look like an SSN, EIN, card or account number. Replaced before text goes to the model,
+// so a pasted block of details cannot leak a private value into a nonprivate answer.
+const PRIVATE_NUMBER = [
+  /\b\d{3}[-\s]\d{2}[-\s]\d{4}\b/g, // SSN
+  /\b\d{2}-\d{7}\b/g, // EIN
+  /\b(?:\d[ -]?){12,18}\d\b/g, // card, account, IBAN-style digit runs
+  /\b\d{9}\b/g, // SSN or passport number without separators (10 digits stays: phone numbers)
+];
+
+export function redactPrivate(text) {
+  let redacted = false;
+  let out = String(text || '');
+  for (const re of PRIVATE_NUMBER) {
+    out = out.replace(re, () => ((redacted = true), '[private]'));
+  }
+  return { text: out, redacted };
+}

@@ -1,6 +1,6 @@
 // The conversation conductor. Code owns the order of questions and the privacy rules;
 // the model only translates and interprets what the user said.
-import { classify } from './sensitive.js';
+import { classify, redactPrivate } from './sensitive.js';
 import { detectLanguage, language } from './language.js';
 import {
   PHRASES,
@@ -18,6 +18,8 @@ const FIELD_CHUNK = 10;
 const TEXT_CHUNK = 12;
 const HISTORY_TURNS = 6;
 const MAX_SPOKEN_OPTIONS = 8;
+const MAX_READBACK = 15;
+const MAX_REMAINING = 10;
 
 const chunks = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
 // "Name *:" -> "Name"
@@ -174,8 +176,13 @@ export class Agent {
     });
   }
 
+  // The question stays on the current field until it is answered or skipped; then the next open field
+  // after it, wrapping round to anything the user jumped over.
   nextField() {
-    return this.fields.find((f) => !this.filled.has(f.id) && !this.skipped.has(f.id)) || null;
+    const open = (f) => !!f && !this.filled.has(f.id) && !this.skipped.has(f.id);
+    if (open(this.current) && this.fields.includes(this.current)) return this.current;
+    const i = this.fields.indexOf(this.current);
+    return this.fields.slice(i + 1).find(open) || this.fields.find(open) || null;
   }
 
   question(field) {
@@ -200,8 +207,8 @@ export class Agent {
     return parts.join(' ');
   }
 
-  async advance() {
-    const next = this.nextField();
+  async advance(target = null) {
+    const next = target || this.nextField();
     this.current = next;
     if (!next) {
       await this.page.highlight(null);
@@ -263,6 +270,8 @@ export class Agent {
       this.skipped.add(this.current.id);
       return this.advance();
     }
+    // Pasted details may hold a private number: the model never sees it.
+    const { text: said, redacted } = redactPrivate(text);
     const res = await this.llm.chat({
       messages: [
         {
@@ -277,7 +286,7 @@ export class Agent {
             asked: this.lastAsked,
           }),
         },
-        { role: 'user', content: text },
+        { role: 'user', content: said },
       ],
       tools: TOOLS,
       toolChoice: 'required',
@@ -285,22 +294,37 @@ export class Agent {
     });
 
     const done = [];
+    const spoken = [];
+    const navLog = [];
     let reply = '';
     let refusedPrivate = false;
     let progressed = false;
+    let target = null;
+    let info = false;
 
     for (const call of res.toolCalls) {
       if (call.name === 'fill_fields') {
         for (const v of Array.isArray(call.args.values) ? call.args.values : []) {
           const field = this.fields.find((f) => f.id === v?.field_id);
-          if (!field || v.value == null || v.value === '') continue;
-          if (field.sensitive) {
+          if (!field) continue;
+          let value = v.value;
+          const copy = v.copy_from ? this.fields.find((f) => f.id === v.copy_from) : null;
+          if (v.copy_from) {
+            // Only an answer already on the form, and never a private one, can be copied.
+            const source = copy && copy !== field && !copy.sensitive ? this.values.get(copy.id) : '';
+            if (field.sensitive) refusedPrivate = true;
+            else if (!source) spoken.push(this.phrases.copied_nothing);
+            if (field.sensitive || !source) continue;
+            value = source;
+          }
+          if (value == null || value === '') continue;
+          if (field.sensitive || String(value).includes('[private]')) {
             refusedPrivate = true;
             continue;
           }
           // Fluent only interprets: a number the user never gave does not go on the form.
-          if (this.inventedNumber(String(v.value), text)) continue;
-          const r = await this.page.fill(field.id, String(v.value));
+          if (!copy && this.inventedNumber(String(value), text)) continue;
+          const r = await this.page.fill(field.id, String(value));
           if (!r?.ok) continue;
           this.filled.add(field.id);
           this.skipped.delete(field.id);
@@ -314,6 +338,13 @@ export class Agent {
           this.skipped.add(field.id);
           progressed = true;
         }
+      } else if (call.name === 'navigate') {
+        const n = await this.navigate(call.args || {});
+        if (n.say) spoken.push(n.say);
+        if (n.target) target = n.target;
+        if (n.handled) progressed = true;
+        if (n.info) info = true;
+        if (n.log) navLog.push(n.log);
       } else if (call.name === 'ask_user' && call.args.message) {
         reply = String(call.args.message);
       }
@@ -323,18 +354,78 @@ export class Agent {
     // Kept as a plain log inside the system prompt: as chat turns, small models start imitating it.
     const outcome = [
       done.length ? `you wrote ${done.map((d) => `${d.original} = "${d.value}"`).join(', ')}` : '',
+      ...navLog,
       reply ? `you replied "${reply}"` : '',
     ].filter(Boolean).join('; ');
-    this.history.push(`- User said "${text}"; ${outcome || 'nothing was filled'}.`);
+    this.history.push(`- User said "${said}"; ${outcome || 'nothing was filled'}.`);
 
     if (done.length) {
       this.ui.filled(done);
       await this.ui.say(`${this.phrases.filled} ${done.map((d) => this.readBack(d).replace(/\.+$/, '')).join('. ')}.`);
     }
     if (refusedPrivate) await this.ui.say(this.phrases.private_refused);
-    if (progressed) return this.advance();
+    else if (redacted) await this.ui.say(this.phrases.redacted);
+    for (const s of spoken) await this.ui.say(s);
+    // Reading things out is not an answer: carry on with the question that is waiting.
+    if (progressed || (info && this.mode !== 'done')) return this.advance(target);
     if (reply) return this.ui.say(reply);
-    if (!refusedPrivate) await this.ui.say(this.phrases.not_understood);
+    if (!refusedPrivate && !redacted && !spoken.length) await this.ui.say(this.phrases.not_understood);
+  }
+
+  // Moves around the form on the user's request. The model only names an action; code does it and
+  // decides what is read out, so private values stay private.
+  async navigate({ action, field_id: id }) {
+    const byId = id ? this.fields.find((f) => f.id === id) : null;
+    const label = (f) => bare(this.tr(f).label);
+    const cur = this.current;
+    switch (action) {
+      case 'back': {
+        const i = cur ? this.fields.indexOf(cur) : this.fields.length;
+        if (i <= 0) return { say: this.phrases.first_question, info: true };
+        const target = this.fields[i - 1];
+        this.skipped.delete(target.id);
+        return { target, handled: true, log: `you went back to ${target.label}` };
+      }
+      case 'goto': {
+        if (!byId) return {};
+        this.skipped.delete(byId.id);
+        return { target: byId, handled: true, log: `you went to ${byId.label}` };
+      }
+      case 'clear': {
+        const field = byId || cur;
+        if (!field) return {};
+        const r = await this.page.fill(field.id, '');
+        if (!r?.ok) return {};
+        this.filled.delete(field.id);
+        this.skipped.delete(field.id);
+        this.values.delete(field.id);
+        const reopen = field === cur || this.mode === 'done'; // ask it again right away
+        return { say: `${this.phrases.cleared} ${label(field)}.`, target: reopen ? field : null, handled: this.mode === 'done', info: true, log: `you cleared ${field.label}` };
+      }
+      case 'skip_section': {
+        const section = (byId || cur)?.section;
+        if (!section) return {};
+        for (const f of this.fields) if (f.section === section && !this.filled.has(f.id)) this.skipped.add(f.id);
+        return { say: this.phrases.skipped_section, handled: true, log: `you skipped the section "${section}"` };
+      }
+      case 'readback': {
+        const shown = (byId ? [byId] : this.fields).filter((f) => this.filled.has(f.id));
+        const lines = shown.slice(0, MAX_READBACK).map((f) => {
+          if (f.sensitive) return `${label(f)}: ${this.phrases.typed_private}`;
+          const v = String(this.values.get(f.id) ?? '');
+          return this.readBack({ id: f.id, label: this.tr(f).label, value: v.length > 80 ? `${v.slice(0, 80)}…` : v });
+        });
+        return { say: lines.length ? `${lines.join('. ')}.` : this.phrases.nothing_yet, info: true, log: 'you read the answers back' };
+      }
+      case 'remaining': {
+        const open = this.fields.filter((f) => !this.filled.has(f.id) && !this.skipped.has(f.id));
+        const names = open.slice(0, MAX_REMAINING).map(label);
+        if (open.length > MAX_REMAINING) names.push(`+${open.length - MAX_REMAINING}`);
+        return { say: open.length ? `${this.phrases.remaining} ${names.join(', ')}.` : this.phrases.nothing_left, info: true, log: 'you listed what is left' };
+      }
+      default:
+        return {};
+    }
   }
 
   // True when `value` contains a number (3+ digits) that appears neither in what the user just said

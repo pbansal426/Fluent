@@ -25,3 +25,16 @@ test('cancel releases recognition without onend; stale results cannot become an 
     assert.equal(await pending, '');
   } finally { delete globalThis.SpeechRecognition; }
 });
+
+test('recognition that never fires events times out', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let aborted = false;
+  globalThis.SpeechRecognition = class { start() {} abort() { aborted = true; } };
+  try {
+    const pending = createSpeech().listen('en-US');
+    const rejected = assert.rejects(pending, /timeout/);
+    t.mock.timers.tick(20000);
+    await rejected;
+    assert.equal(aborted, true);
+  } finally { delete globalThis.SpeechRecognition; }
+});
