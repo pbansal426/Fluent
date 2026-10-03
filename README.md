@@ -7,6 +7,14 @@ Fill out any web form in your own language. Fluent translates the form in place 
 `npm run demo`, then open <http://localhost:8765/demo/app/>. The form is on the left and the same Fluent sidebar on the right.
 **Upload a PDF form** with the button (or drop a file on the page), or pick a sample. The server also forwards the AI requests, so LM Studio (or a cloud key pasted in the sidebar's settings) works from an ordinary web page; allow the microphone when the browser asks. Add `?lang=es` to the address to start in another language.
 
+### The permanent public site (Vercel)
+
+Live at **https://fluent-demo-chi.vercel.app**. Your laptop can be off. The OpenRouter key is stored only in the Vercel project's
+encrypted environment settings (`OPENROUTER_API_KEY`, Production, hidden): it is not in the code, the repo or the page.
+`vercel.json` builds only the demo, sidebar, viewer and sample forms (`tools/build-site.mjs`), and `api/proxy.js` forwards AI requests
+with the same safety rules as the local server (`tools/proxy-core.mjs`). To change something: edit, then `npx vercel deploy --prod --yes`
+from the project folder. To change the key: `npx vercel env rm OPENROUTER_API_KEY production`, then add it again (see `vercel env add --help`).
+
 ### Sharing the demo on a public link
 
 1. Create an OpenRouter key **with a spending cap** (a few dollars is plenty).
