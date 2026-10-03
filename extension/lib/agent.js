@@ -219,7 +219,16 @@ export class Agent {
         maxTokens: 2500,
       });
     } catch (e) {
-      this.ui.error(e);
+      this.log('translate-failed', { fields: chunk.length, message: String(e?.message), raw: e?.raw });
+      // A reply that could not be read: try the two halves separately. A smaller request usually works, and the user
+      // never sees a half-translated form turn into an error. Real failures (bad key, no connection) are still shown.
+      if (e?.kind === 'bad_json' && chunk.length > 1) {
+        const mid = Math.ceil(chunk.length / 2);
+        await this.translateFields(chunk.slice(0, mid));
+        await this.translateFields(chunk.slice(mid));
+        return;
+      }
+      if (e?.kind !== 'bad_json') this.ui.error(e);
     }
     const byId = new Map((out?.fields || []).map((t) => [t.id, t]));
     const applied = [];

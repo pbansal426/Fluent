@@ -9,7 +9,7 @@ import { createLog } from '../lib/log.js';
 import { createNeuralTts } from '../lib/neural-tts.js';
 
 // Shown at the bottom of the panel, so it is obvious which copy of the extension is running.
-const BUILD = '2026-10-03.12';
+const BUILD = '2026-10-03.13';
 const log = createLog();
 
 const DEFAULTS = {
@@ -306,7 +306,7 @@ const ui = {
   log,
   error(e) {
     console.error(e);
-    log('error', { message: String(e?.message || e) });
+    log('error', { message: String(e?.message || e), kind: e?.kind, raw: e?.raw });
     if (e?.kind === 'lost') {
       const text = state.phrases.lost_connection;
       reset().then(() => { banner(text); });

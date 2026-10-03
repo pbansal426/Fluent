@@ -1,8 +1,9 @@
 // Minimal client for any OpenAI-compatible chat endpoint (LM Studio, OpenAI, Ollama, ...).
 
 export class LlmError extends Error {
-  constructor(kind, message) {
+  constructor(kind, message, raw = '') {
     super(message);
+    this.raw = raw; // what the model actually said, for the development log
     this.kind = kind; // 'unreachable' | 'timeout' | 'http' | 'bad_json'
   }
 }
@@ -57,6 +58,20 @@ export function parseTextToolCalls(content, names) {
   return calls;
 }
 
+// OpenAI-family models in strict structured-output mode refuse a schema whose objects do not say
+// additionalProperties: false. Say it everywhere, so every provider accepts the same schema.
+export function strictify(format) {
+  if (!format?.json_schema?.schema) return format;
+  const walk = (node) => {
+    if (Array.isArray(node)) return node.map(walk);
+    if (!node || typeof node !== 'object') return node;
+    const out = Object.fromEntries(Object.entries(node).map(([k, v]) => [k, walk(v)]));
+    if (out.type === 'object' && out.properties && out.additionalProperties === undefined) out.additionalProperties = false;
+    return out;
+  };
+  return { ...format, json_schema: { ...format.json_schema, schema: walk(format.json_schema.schema) } };
+}
+
 export function createClient({ baseUrl, model, apiKey = '', disableThinking = true, fetchImpl = (...a) => fetch(...a) }) {
   const root = String(baseUrl || '').replace(/\/+$/, '');
   const headers = { 'Content-Type': 'application/json' };
@@ -85,7 +100,7 @@ export function createClient({ baseUrl, model, apiKey = '', disableThinking = tr
   async function chat({ messages, tools, toolChoice, responseFormat, maxTokens = 1200, temperature = 0.1 }) {
     const optional = {
       reasoning_effort: disableThinking ? 'none' : undefined,
-      response_format: responseFormat,
+      response_format: strictify(responseFormat),
     };
     for (;;) {
       const body = { model, messages, temperature, max_tokens: maxTokens };
@@ -100,7 +115,8 @@ export function createClient({ baseUrl, model, apiKey = '', disableThinking = tr
         const toolCalls = (msg.tool_calls || [])
           .map((c) => ({ name: c.function?.name, args: parseJsonLoose(c.function?.arguments) }))
           .filter((c) => c.name && c.args);
-        const content = stripThink(msg.content);
+        const content = stripThink(typeof msg.content === 'string' ? msg.content : Array.isArray(msg.content) ? msg.content.map((p) => p?.text || '').join('') : '');
+        const finish = data.choices?.[0]?.finish_reason;
         if (tools && !toolCalls.length && content) {
           const names = tools.map((t) => t.function.name);
           const fromText = parseTextToolCalls(content, names);
@@ -108,7 +124,7 @@ export function createClient({ baseUrl, model, apiKey = '', disableThinking = tr
           // Tool-call debris that could not be read must not be shown or spoken to the user.
           if (names.some((n) => content.includes(n)) || content.includes('<|')) return { content: '', toolCalls: [] };
         }
-        return { content, toolCalls };
+        return { content, toolCalls, finish };
       } catch (e) {
         // Not every server knows every optional parameter: drop one and try again.
         const droppable = Object.keys(optional).find((k) => body[k] !== undefined);
@@ -122,13 +138,21 @@ export function createClient({ baseUrl, model, apiKey = '', disableThinking = tr
   }
 
   // Ask for a JSON object; retries once if the model returns something unparseable.
+  // Models differ in how they break a JSON request. Retry with the fix that fits: more room if the answer was cut
+  // off, a plain reminder if it was prose, and finally without the structured-output setting some providers mishandle.
   async function chatJson(opts) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const { content } = await chat(opts);
+    let current = opts;
+    let last = '';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { content, finish } = await chat(current);
       const parsed = parseJsonLoose(content);
       if (parsed) return parsed;
+      last = content;
+      if (finish === 'length') current = { ...current, maxTokens: Math.min((current.maxTokens || 1200) * 2, 6000) };
+      else if (attempt === 0) current = { ...current, messages: [...opts.messages, { role: 'user', content: 'Reply with only the JSON object, with no other words and no code fence.' }] };
+      else current = { ...current, responseFormat: undefined };
     }
-    throw new LlmError('bad_json', 'The AI model did not return valid JSON');
+    throw new LlmError('bad_json', 'The AI model did not return valid JSON', String(last).slice(0, 400));
   }
 
   async function listModels() {

@@ -356,6 +356,34 @@ test('relink with nothing in common reports no match', async () => {
   assert.equal((await agent.relink()).size, 0);
 });
 
+test('an unreadable translation reply is retried in halves and never shown to the user as an error', async () => {
+  const { agent, log } = setup([]);
+  const sizes = [];
+  agent.llm.chatJson = async ({ messages }) => {
+    if (/what this form is/.test(messages[0].content)) return { overview: '' };
+    const input = JSON.parse(messages[1].content);
+    sizes.push(input.length);
+    if (input.length > 2) throw Object.assign(new Error('The AI model did not return valid JSON'), { kind: 'bad_json', raw: 'prose' });
+    return { form_language: 'English', fields: input.map((f) => ({ id: f.id, label: `ES:${f.label}`, explanation: 'exp', question: '', options: f.options, section: '', english: f.label })) };
+  };
+  await agent.start();
+  await agent.translating;
+  assert.deepEqual(sizes.slice(0, 3), [4, 2, 2]); // the four fields, then each half
+  assert.equal(agent.tr(agent.fields[3]).label, 'ES:Reason for visit'); // every field ended up translated
+  assert.equal(log.errors.length, 0); // nothing scary in the chat
+});
+
+test('a failure that retrying cannot fix (bad key, no connection) is still shown', async () => {
+  const { agent, log } = setup([]);
+  agent.llm.chatJson = async ({ messages }) => {
+    if (/what this form is/.test(messages[0].content)) return { overview: '' };
+    throw Object.assign(new Error('AI endpoint error 401'), { kind: 'http', status: 401 });
+  };
+  await agent.start();
+  await agent.translating;
+  assert.ok(log.errors.length >= 1);
+});
+
 test('a long PDF: when a page is finished the assistant moves on to the next page, then finishes', async () => {
   const { agent, log } = setup([fill(['f1', 'Ana'])]);
   const pages = [[FIELDS[0]], [{ ...base, id: 'g1', kind: 'text', label: 'City' }]];

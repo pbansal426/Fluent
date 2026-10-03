@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createClient, stripThink, parseJsonLoose } from '../extension/lib/llm.js';
+import { createClient, stripThink, parseJsonLoose, strictify } from '../extension/lib/llm.js';
 
 const ok = (message) => ({ ok: true, json: async () => ({ choices: [{ message }] }) });
 const bad = (status, text = 'unsupported') => ({ ok: false, status, text: async () => text });
@@ -75,4 +75,41 @@ test('chatJson retries once on unparseable output', async () => {
   let n = 0;
   const llm = createClient({ baseUrl: 'http://x/v1', model: 'm', fetchImpl: async () => ok({ content: n++ ? '{"a":1}' : 'oops' }) });
   assert.deepEqual(await llm.chatJson({ messages: [] }), { a: 1 });
+});
+
+test('strictify adds additionalProperties:false to every object in a schema', () => {
+  const fmt = { type: 'json_schema', json_schema: { name: 'x', strict: true, schema: { type: 'object', properties: { a: { type: 'array', items: { type: 'object', properties: { b: { type: 'string' } }, required: ['b'] } } }, required: ['a'] } } };
+  const out = strictify(fmt).json_schema.schema;
+  assert.equal(out.additionalProperties, false);
+  assert.equal(out.properties.a.items.additionalProperties, false);
+  assert.equal(fmt.json_schema.schema.additionalProperties, undefined); // the original is untouched
+});
+
+test('chatJson survives prose, truncation and a rejected structured-output setting', async () => {
+  const calls = [];
+  const replies = [
+    { content: 'Sure! Here is what you asked for, but no JSON.' }, // prose
+    { content: '{"fields": [{"id": "f1"', finish: 'length' }, // cut off
+    { content: '{"ok": true}' },
+  ];
+  const llm = createClient({
+    baseUrl: 'http://x/v1', model: 'm',
+    fetchImpl: async (url, init) => {
+      const body = JSON.parse(init.body);
+      calls.push(body);
+      const r = replies.shift();
+      return { ok: true, json: async () => ({ choices: [{ finish_reason: r.finish || 'stop', message: { content: r.content } }] }) };
+    },
+  });
+  const out = await llm.chatJson({ messages: [{ role: 'user', content: 'x' }], responseFormat: { type: 'json_schema', json_schema: { name: 'n', strict: true, schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] } } }, maxTokens: 1000 });
+  assert.deepEqual(out, { ok: true });
+  assert.equal(calls.length, 3);
+  assert.match(calls[1].messages.at(-1).content, /only the JSON object/); // reminded after prose
+  assert.equal(calls[2].max_tokens, 2000); // given more room after being cut off
+  assert.equal(calls[0].response_format.json_schema.schema.additionalProperties, false);
+});
+
+test('a hopeless reply is reported with what the model said, for the log', async () => {
+  const llm = createClient({ baseUrl: 'http://x/v1', model: 'm', fetchImpl: async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'I cannot do that.' } }] }) }) });
+  await assert.rejects(llm.chatJson({ messages: [] }), (e) => e.kind === 'bad_json' && /cannot do that/.test(e.raw));
 });
