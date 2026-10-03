@@ -14,8 +14,10 @@
         abort() {} // Chrome never emits onend
       };
       w.navigator.mediaDevices.getUserMedia = () => fault === 'pending-mic' ? new Promise(() => {}) : Promise.resolve({ getTracks: () => [{ stop() {} }] });
-      w.fetch = async (url) => {
+      w.fetch = async (url, init) => {
         if (url.endsWith('/models')) return Response.json({ data: [{ id: 'test' }] });
+        // Same-language forms ask the model for simple wording first; only chat turns are counted.
+        if (!/"tools"/.test(init?.body || '')) return Response.json({ choices: [{ message: { content: JSON.stringify({ form_language: 'English', fields: [], language: 'English' }) } }] });
         calls++;
         return Response.json({ choices: [{ message: { tool_calls: [{ function: { name: 'ask_user', arguments: '{"message":"Your typed message was received."}' } }] } }] });
       };

@@ -2,3 +2,6 @@
 node_modules/
 .claude/
 *.pdf
+.agents/
+skills-lock.json
+graphify-out/

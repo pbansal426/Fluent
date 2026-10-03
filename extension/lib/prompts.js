@@ -14,6 +14,7 @@ export const PHRASES = {
   skip_word: 'skip',
   checkbox: 'Say yes to check this box, or no to leave it empty.',
   done: 'That was the last question. Please look over the form. Then send it yourself.',
+  still_there: 'Are you still there? Let me ask again.',
   not_understood: 'Sorry, I did not understand. Can you say it a different way?',
   empty_required: 'This one is needed, and it is still empty.',
   no_form: 'I could not find a form on this page.',

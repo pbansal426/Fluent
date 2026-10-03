@@ -504,6 +504,12 @@ export class Agent {
     }
   }
 
+  // Nobody answered for a while: ask again, gently, like a person waiting.
+  async nudge() {
+    if (!this.current || this.mode !== 'listen') return;
+    await this.ui.say(`${this.phrases.still_there} ${this.lastAsked || ''}`.trim());
+  }
+
   async skipCurrent() {
     if (this.busy || !this.current) return;
     this.skipped.add(this.current.id);

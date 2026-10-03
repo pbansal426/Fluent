@@ -3,6 +3,7 @@ import { createClient } from '../lib/llm.js';
 import { Agent } from '../lib/agent.js';
 import { PHRASES, translatePhrases } from '../lib/prompts.js';
 import { LANGUAGES, createSpeech } from '../lib/speech.js';
+import { createLive } from '../lib/live.js';
 
 const DEFAULTS = {
   baseUrl: 'http://localhost:1234/v1',
@@ -12,6 +13,7 @@ const DEFAULTS = {
   speak: true,
   live: true, // hands-free: listen automatically after the assistant speaks
   noThink: true,
+  bargeIn: 'normal', // talk over the assistant: off | low | normal | high
 };
 const CONTENT_FILES = ['content/scan.js', 'content/overlay.js', 'content/fill.js', 'content/listen.js', 'content/content.js'];
 
@@ -36,6 +38,10 @@ const state = {
   queue: [],
   listenToken: 0,
   session: 0,
+  muted: false, // the user paused the microphone for now
+  live: null, // the open microphone stream of live mode
+  speakStart: 0,
+  falseBarges: 0,
 };
 
 const lang = () => LANGUAGES.find((l) => l.code === state.settings.lang) || LANGUAGES[0];
@@ -51,6 +57,7 @@ async function loadSettings() {
   $('speak').checked = state.settings.speak;
   $('live').checked = state.settings.live;
   $('no-think').checked = state.settings.noThink;
+  $('barge-in').value = state.settings.bargeIn;
   $('lang').value = state.settings.lang;
 }
 
@@ -62,6 +69,7 @@ async function saveSettings() {
     speak: $('speak').checked,
     live: $('live').checked,
     noThink: $('no-think').checked,
+    bargeIn: $('barge-in').value,
     lang: $('lang').value,
   });
   await chrome.storage.local.set({ settings: state.settings });
@@ -149,6 +157,9 @@ function render() {
   $('mic').classList.toggle('armed', state.voiceOn);
   $('mic').classList.toggle('on', state.listening);
   $('mic').classList.toggle('speaking', state.speaking);
+  $('mic').classList.toggle('muted', state.muted);
+  if (state.muted) $('mic').title = 'Microphone is paused. Tap to talk again.';
+  else if (state.listening) $('mic').title = 'Tap to pause the microphone';
   $('live-status').textContent = state.listening ? p.listening : '';
   for (const id of ['continue', 'skip', 'translate']) $(id).disabled = state.busy;
 }
@@ -213,9 +224,11 @@ const ui = {
     bubble('agent', text);
     if (!state.settings.speak || state.skipSpeech) return;
     state.speaking = true;
+    state.speakStart = performance.now();
+    state.live?.arm(!state.muted && !state.bargeOff); // the user may now talk over the assistant
     render();
     try { await speech.speak(text, lang().speech); }
-    finally { state.speaking = false; render(); }
+    finally { state.live?.arm(false); state.speaking = false; render(); }
   },
   prompt(p) {
     state.mode = p.mode;
@@ -282,7 +295,7 @@ function phrasesFor(llm) {
     phraseJobs.set(
       code,
       (async () => {
-        const key = `phrases:v4:${code}`; // bump when PHRASES changes
+        const key = `phrases:v5:${code}`; // bump when PHRASES changes
         const cached = (await chrome.storage.local.get(key))[key];
         if (cached && Object.keys(PHRASES).every((k) => cached[k])) return cached;
         const phrases = await translatePhrases(llm, name);
@@ -314,6 +327,9 @@ async function start() {
     // Hands-free by default: after the assistant speaks, it listens.
     state.voiceOn = state.settings.live && speech.supported;
     state.silentRounds = 0;
+    state.muted = false;
+    state.bargeOff = false;
+    await openLive();
     render();
   } catch (e) {
     return banner(e?.kind === 'unreachable' ? `Cannot reach the AI model at ${state.settings.baseUrl}. Is LM Studio's server running?` : String(e?.message || e));
@@ -328,8 +344,9 @@ async function reset() {
   cancelListening();
   speech.stopSpeaking();
   speech.stopListening();
+  closeLive();
   state.send?.({ type: 'fluent:clear' }).catch(() => {});
-  Object.assign(state, { agent: null, send: null, mode: 'idle', field: null, busy: false, queue: [], pendingRescan: false, pageListen: false, voiceOn: false, listening: false, speaking: false, skipSpeech: false, phrases: { ...PHRASES } });
+  Object.assign(state, { agent: null, send: null, mode: 'idle', field: null, busy: false, queue: [], pendingRescan: false, pageListen: false, voiceOn: false, muted: false, listening: false, speaking: false, skipSpeech: false, phrases: { ...PHRASES } });
   banner('');
   render();
 }
@@ -426,7 +443,8 @@ async function recognise() {
   return res?.text || '';
 }
 
-const MAX_SILENT_ROUNDS = 3; // how many times to keep listening through silence before pausing
+const NUDGE_AFTER = 2; // silent rounds before the assistant gently asks again
+const MAX_SILENT_ROUNDS = 6; // how many times to keep listening through silence before pausing
 
 // byUser: the user tapped the mic (so it is fine to open the permission tab); otherwise hands-free.
 async function listenOnce(byUser = false) {
@@ -471,11 +489,51 @@ async function listenOnce(byUser = false) {
   // Silence. Keep listening for a while, like a person waiting for an answer, then pause.
   if (state.voiceOn && ++state.silentRounds < MAX_SILENT_ROUNDS) {
     render();
+    if (state.silentRounds === NUDGE_AFTER && state.agent) {
+      // Like a person waiting: check they are still there and ask again, then keep listening.
+      return runTurn(() => state.agent.nudge());
+    }
     return listenOnce();
   }
   state.voiceOn = false;
   state.silentRounds = 0;
   render();
+}
+
+// Live mode keeps one microphone stream open for the whole session, so the user can simply talk over
+// the assistant. Without permission (or with talk-over off) the old tap-to-interrupt still works.
+async function openLive() {
+  closeLive();
+  if (!state.settings.live || !speech.supported || state.settings.bargeIn === 'off') return;
+  const live = createLive({ onVoice: talkOver, sensitivity: state.settings.bargeIn });
+  let timer;
+  try {
+    await Promise.race([live.open(), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('no answer')), 3000); })]);
+    state.live = live;
+    state.micOk = true;
+  } catch {
+    live.close();
+  } finally { clearTimeout(timer); }
+}
+
+function closeLive() {
+  state.live?.close();
+  state.live = null;
+}
+
+// The user started talking while the assistant was speaking.
+function talkOver() {
+  if (!state.speaking || state.muted || state.bargeOff) return;
+  // Speaker echo can look like talking. If it keeps cutting the assistant off right away, stop listening for it.
+  state.falseBarges = performance.now() - state.speakStart < 700 ? state.falseBarges + 1 : 0;
+  if (state.falseBarges >= 2) {
+    state.bargeOff = true;
+    state.live?.arm(false);
+    return banner('Talking over the assistant is off, because it seems to hear itself. Use headphones, or tap the microphone to interrupt.', 'info');
+  }
+  state.skipSpeech = true;
+  state.voiceOn = true;
+  speech.stopSpeaking();
 }
 
 function toggleMic() {
@@ -487,12 +545,15 @@ function toggleMic() {
     return;
   }
   if (state.listening) {
+    // Pause the microphone for now; tap again to talk.
     state.voiceOn = false;
+    state.muted = true;
     cancelListening();
     render();
     return;
   }
   banner('');
+  state.muted = false;
   state.voiceOn = true;
   state.silentRounds = 0;
   render();
