@@ -10,7 +10,9 @@
 <header>
   <div class="brand">Fluent</div>
   <select id="lang" aria-label="Your language"></select>
-  <button id="settings-btn" class="icon" aria-label="Settings" title="Settings">⚙</button>
+  <button id="settings-btn" class="icon" aria-label="Settings" title="Settings">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2.5"/><circle cx="9" cy="12" r="2.5"/><circle cx="17" cy="18" r="2.5"/></svg>
+  </button>
 </header>
 
 <section id="settings" hidden>
@@ -18,6 +20,7 @@
   <label>Model<input id="model" list="models" spellcheck="false"><datalist id="models"></datalist></label>
   <label>API key (optional)<input id="api-key" type="password" autocomplete="off"></label>
   <label class="check"><input id="speak" type="checkbox"> Speak replies aloud</label>
+  <label class="check"><input id="live" type="checkbox"> Hands-free conversation (listen automatically after speaking)</label>
   <label class="check"><input id="no-think" type="checkbox"> Turn off model "thinking" (much faster)</label>
   <div class="row">
     <button id="save-settings" class="primary small">Save</button>
@@ -30,9 +33,9 @@
 
 <main>
   <section id="welcome">
-    <div class="hero">🌐</div>
+    <svg class="hero" viewBox="0 0 48 48" aria-hidden="true"><rect x="9" y="5" width="30" height="38" rx="4"/><path d="M16 15h16M16 23h16M16 31h9"/><path d="M29 32l3 3 6-7"/></svg>
     <button id="start" class="primary big"></button>
-    <p class="note" id="welcome-note">Open a page with a form, choose your language above, then press the button.</p>
+    <p class="note" id="welcome-note">Open a page or PDF with a form, choose your language above, then press the button.</p>
   </section>
 
   <section id="chat" hidden>
@@ -49,12 +52,20 @@
 </main>
 
 <footer id="composer" hidden>
-  <label class="check toggle"><input id="show-tr" type="checkbox" checked> <span id="show-tr-label">Show translations</span></label>
+  <div class="row between">
+    <label class="check toggle"><input id="show-tr" type="checkbox" checked> <span id="show-tr-label">Show translations</span></label>
+    <span id="live-status" class="note" aria-live="polite"></span>
+  </div>
   <div id="interim" class="note" hidden></div>
   <form id="send-form">
-    <button id="mic" type="button" class="mic" aria-label="Microphone" title="Microphone">🎤</button>
+    <button id="mic" type="button" class="mic" aria-label="Microphone" title="Microphone">
+      <svg class="ico ico-mic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>
+      <svg class="ico ico-wave" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 6.5v11M12 3.5v17M16 7.5v9M20 10v4"/></svg>
+    </button>
     <input id="text" type="text" autocomplete="off" dir="auto">
-    <button id="send" class="primary" aria-label="Send">➤</button>
+    <button id="send" class="primary send" aria-label="Send">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </button>
   </form>
 </footer>
 

@@ -65,7 +65,9 @@ const CASES = {
     userLang: 'English',
     skip: 'skip this one',
     answers: {
+      'd Número de control': ["I don't know what that is", "I'm not sure, what should I put?"],
       'e Primer nombre': ['My name is Maria E. Lopez'],
+      '7 Propinas': ['what do people usually put here?'],
       Apellido: ['Lopez'],
       '1 Salarios': ['my wages were 52000 dollars and the federal income tax withheld was 6100'],
       '2 Impuesto federal': ['6100'],
@@ -92,6 +94,8 @@ const CASES = {
       'two boxes from one sentence': /52,?000/.test(v('1 Salarios')) && /6,?100/.test(v('2 Impuesto federal')),
       'social security wages spoken, not typed': /52,?000/.test(v('3 Salarios para')) && !typedLabels.some((l) => l.startsWith('3 ')),
       checkboxes: v('Empleado estatutario') === '' && v('Plan de jubilación') === 'true',
+      // Interpret only: when the user gives no answer, nothing may appear in the field.
+      'nothing invented when the user gave no answer': v('d Número de control') === '' && v('7 Propinas') === '' && v('8 Propinas') === '' && v('12a') === '',
       'form language detected': (formLang) => /spanish/i.test(formLang),
     }),
   },

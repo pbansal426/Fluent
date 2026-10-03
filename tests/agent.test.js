@@ -114,6 +114,18 @@ test('skip, required typed field, and finishing', async () => {
   assert.equal(log.said.at(-1), agent.phrases.done);
 });
 
+test('interpret only: a number the user never said is not written', async () => {
+  const { agent, log, dom } = setup([fill(['f1', '555-0199']), fill(['f1', '1998-03-03']), fill(['f1', '52000'])]);
+  await agent.start();
+  await agent.handleUser('my number is 555 0142'); // the model made up different digits
+  assert.equal(dom.has('f1'), false);
+  assert.equal(log.said.at(-1), agent.phrases.not_understood);
+  await agent.handleUser('3 de marzo de 1998'); // reformatting what was said is interpreting
+  assert.equal(dom.get('f1'), '1998-03-03');
+  await agent.handleUser('fifty two thousand'); // no digits to compare: trusted
+  assert.equal(dom.get('f1'), '52000');
+});
+
 test('plain text from the model is spoken as a reply', async () => {
   const { agent, log } = setup([{ content: 'Es su nombre legal.', toolCalls: [] }]);
   await agent.start();

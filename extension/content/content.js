@@ -15,6 +15,8 @@
     'fluent:read': (m) => F.read(m.id),
     'fluent:focus': (m) => F.focus(m.id),
     'fluent:clear': () => F.clear(),
+    'fluent:listen': (m) => F.listen(m.lang),
+    'fluent:stop-listen': () => F.stopListening(),
   };
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -23,7 +25,12 @@
     // Messages to the PDF viewer are broadcast to every extension page; only the addressed tab answers.
     if ('viewerTab' in msg ? msg.viewerTab !== F.viewerTabId : F.viewerTabId != null) return;
     try {
-      sendResponse(handler(msg));
+      const result = handler(msg);
+      if (result instanceof Promise) {
+        result.then(sendResponse, (e) => sendResponse({ ok: false, error: String(e?.message || e) }));
+        return true; // keep the channel open for the answer
+      }
+      sendResponse(result);
     } catch (e) {
       sendResponse({ ok: false, error: String(e?.message || e) });
     }

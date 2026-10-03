@@ -10,9 +10,10 @@ const DEFAULTS = {
   apiKey: '',
   lang: 'es',
   speak: true,
+  live: true, // hands-free: listen automatically after the assistant speaks
   noThink: true,
 };
-const CONTENT_FILES = ['content/scan.js', 'content/overlay.js', 'content/fill.js', 'content/content.js'];
+const CONTENT_FILES = ['content/scan.js', 'content/overlay.js', 'content/fill.js', 'content/listen.js', 'content/content.js'];
 
 const $ = (id) => document.getElementById(id);
 const speech = createSpeech();
@@ -27,6 +28,10 @@ const state = {
   busy: false,
   voiceOn: false,
   listening: false,
+  speaking: false,
+  skipSpeech: false, // the user interrupted: stay quiet until this turn ends
+  silentRounds: 0,
+  micOk: false,
   pendingRescan: false,
 };
 
@@ -41,6 +46,7 @@ async function loadSettings() {
   $('model').value = state.settings.model;
   $('api-key').value = state.settings.apiKey;
   $('speak').checked = state.settings.speak;
+  $('live').checked = state.settings.live;
   $('no-think').checked = state.settings.noThink;
   $('lang').value = state.settings.lang;
 }
@@ -51,6 +57,7 @@ async function saveSettings() {
     model: $('model').value.trim() || DEFAULTS.model,
     apiKey: $('api-key').value.trim(),
     speak: $('speak').checked,
+    live: $('live').checked,
     noThink: $('no-think').checked,
     lang: $('lang').value,
   });
@@ -131,9 +138,14 @@ function render() {
   // While a private field is open, nothing typed or spoken here should be able to carry its value.
   $('text').disabled = privateField || state.busy;
   $('send').disabled = privateField || state.busy;
-  $('mic').disabled = typing || state.mode === 'done' || !speech.supported;
-  $('text').placeholder = state.listening ? p.listening : p.input_placeholder;
+  // While the assistant is talking the mic button interrupts it, whatever the field.
+  $('mic').disabled = !speech.supported || (!state.speaking && (typing || state.mode === 'done'));
+  $('mic').title = state.speaking ? 'Tap to interrupt' : typing ? 'The microphone is off while you type this answer' : 'Microphone';
+  $('text').placeholder = p.input_placeholder;
+  $('mic').classList.toggle('armed', state.voiceOn);
   $('mic').classList.toggle('on', state.listening);
+  $('mic').classList.toggle('speaking', state.speaking);
+  $('live-status').textContent = state.listening ? p.listening : '';
   for (const id of ['continue', 'skip', 'translate']) $(id).disabled = state.busy;
 }
 
@@ -191,7 +203,12 @@ function bridge(send) {
 const ui = {
   async say(text) {
     bubble('agent', text);
-    if (state.settings.speak) await speech.speak(text, lang().speech);
+    if (!state.settings.speak || state.skipSpeech) return;
+    state.speaking = true;
+    render();
+    await speech.speak(text, lang().speech);
+    state.speaking = false;
+    render();
   },
   prompt(p) {
     state.mode = p.mode;
@@ -220,6 +237,8 @@ async function runTurn(fn) {
   } finally {
     thinking.remove();
     state.busy = false;
+    state.speaking = false;
+    state.skipSpeech = false;
     render();
   }
   if (state.pendingRescan) {
@@ -227,6 +246,7 @@ async function runTurn(fn) {
     return runTurn(() => state.agent.rescan());
   }
   if (state.voiceOn && state.mode === 'listen') listenOnce();
+  else render();
 }
 
 // The assistant's fixed phrases in the chosen language: cached, and fetched ahead of time
@@ -238,7 +258,7 @@ function phrasesFor(llm) {
     phraseJobs.set(
       code,
       (async () => {
-        const key = `phrases:${code}`;
+        const key = `phrases:v3:${code}`; // bump when PHRASES changes
         const cached = (await chrome.storage.local.get(key))[key];
         if (cached && Object.keys(PHRASES).every((k) => cached[k])) return cached;
         const phrases = await translatePhrases(llm, name);
@@ -266,6 +286,9 @@ async function start() {
     state.phrases = await phrasesFor(llm);
     state.agent = new Agent({ llm, page: bridge(send), ui, userLang: lang().name, phrases: state.phrases });
     $('transcript').replaceChildren();
+    // Hands-free by default: after the assistant speaks, it listens.
+    state.voiceOn = state.settings.live && speech.supported;
+    state.silentRounds = 0;
     render();
   } catch (e) {
     return banner(e?.kind === 'unreachable' ? `Cannot reach the AI model at ${state.settings.baseUrl}. Is LM Studio's server running?` : String(e?.message || e));
@@ -279,7 +302,7 @@ async function reset() {
   speech.stopSpeaking();
   speech.stopListening();
   state.send?.({ type: 'fluent:clear' }).catch(() => {});
-  Object.assign(state, { agent: null, send: null, mode: 'idle', field: null, voiceOn: false, listening: false, phrases: { ...PHRASES } });
+  Object.assign(state, { agent: null, send: null, mode: 'idle', field: null, voiceOn: false, listening: false, speaking: false, skipSpeech: false, phrases: { ...PHRASES } });
   banner('');
   render();
 }
@@ -288,18 +311,25 @@ function sendText(text) {
   text = text.trim();
   if (!text || !state.agent || state.busy) return;
   speech.stopSpeaking();
+  if (state.listening) speech.stopListening(); // typed instead of spoken
   bubble('user', text);
   runTurn(() => state.agent.handleUser(text));
 }
 
 // ---------- voice ----------
 
-async function micAllowed() {
+// Can this panel open the microphone right now? Tried for real rather than asked of the Permissions API,
+// which is not reliable inside a side panel. Returns '' when it works, otherwise the error name.
+async function micProblem() {
+  if (state.micOk) return '';
   try {
-    const status = await navigator.permissions.query({ name: 'microphone' });
-    return status.state === 'granted';
-  } catch {
-    return false;
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('no answer'), { name: 'NotAllowedError' })), 3000));
+    const stream = await Promise.race([navigator.mediaDevices.getUserMedia({ audio: true }), timeout]);
+    stream.getTracks().forEach((t) => t.stop());
+    state.micOk = true;
+    return '';
+  } catch (e) {
+    return e.name || 'Error';
   }
 }
 
@@ -308,7 +338,48 @@ function askForMic() {
   chrome.tabs.create({ url: chrome.runtime.getURL('panel/permission.html') });
 }
 
-async function listenOnce() {
+// Plain-language reasons for each speech recognition failure, always shown with the raw code.
+const MIC_HELP = {
+  'not-allowed': 'Chrome is blocking the microphone for Fluent. On a Mac, also check System Settings → Privacy & Security → Microphone → Google Chrome.',
+  'service-not-allowed': "Chrome's speech service is not available in this browser profile.",
+  network: 'Speech recognition needs an internet connection (Chrome sends the audio to Google).',
+  'audio-capture': 'No microphone was found.',
+  'language-not-supported': 'Chrome cannot recognise speech in this language.',
+  unsupported: 'This browser has no speech recognition.',
+};
+const micBanner = (where, code) => banner(`Microphone (${where}: ${code}). ${MIC_HELP[code] || ''} You can always type your answers below.`, 'info');
+
+// Speech recognition normally runs here in the panel. If Chrome refuses it here even though the
+// microphone itself opens, it runs inside the form's page instead (state.pageListen).
+async function recognise() {
+  if (!state.pageListen) {
+    try {
+      return await speech.listen(lang().speech, { onInterim: (t) => ($('interim').textContent = t) });
+    } catch (e) {
+      if (!/not-allowed/.test(e.message)) throw Object.assign(e, { where: 'panel' });
+      console.warn('Fluent: speech recognition refused in the panel, switching to the page', e.message);
+      state.pageListen = true;
+    }
+  }
+  const res = await state.send({ type: 'fluent:listen', lang: lang().speech });
+  if (res?.error) throw Object.assign(new Error(res.error), { where: 'page' });
+  return res?.text || '';
+}
+
+const MAX_SILENT_ROUNDS = 3; // how many times to keep listening through silence before pausing
+
+// byUser: the user tapped the mic (so it is fine to open the permission tab); otherwise hands-free.
+async function listenOnce(byUser = false) {
+  if (state.listening || state.busy || state.mode !== 'listen') return;
+  const problem = await micProblem();
+  if (problem) {
+    state.voiceOn = false;
+    render();
+    if (problem !== 'NotAllowedError') return banner(`Microphone unavailable (${problem}). ${problem === 'NotFoundError' ? 'No microphone was found.' : ''} You can type your answers below.`, 'info');
+    if (!byUser) return banner('Tap the microphone to answer by voice, or type your answers below.', 'info');
+    banner('Fluent needs permission to use the microphone. A tab opened to ask for it; allow it there, then tap the microphone again.', 'info');
+    return askForMic();
+  }
   if (state.listening || state.busy || state.mode !== 'listen') return;
   state.listening = true;
   $('interim').hidden = false;
@@ -316,30 +387,47 @@ async function listenOnce() {
   render();
   let text = '';
   try {
-    text = await speech.listen(lang().speech, { onInterim: (t) => ($('interim').textContent = t) });
+    text = await recognise();
   } catch (e) {
     state.voiceOn = false;
-    if (/not-allowed|service-not-allowed/.test(e.message)) askForMic();
-    else banner(`Microphone: ${e.message}`, 'info');
+    micBanner(e.where || 'panel', e.message);
   }
   state.listening = false;
   $('interim').hidden = true;
-  if (!text) state.voiceOn = false; // silence: stop the loop until the mic is tapped again
+  if (text) {
+    state.silentRounds = 0;
+    render();
+    return sendText(text);
+  }
+  // Silence. Keep listening for a while, like a person waiting for an answer, then pause.
+  if (state.voiceOn && ++state.silentRounds < MAX_SILENT_ROUNDS) {
+    render();
+    return listenOnce();
+  }
+  state.voiceOn = false;
+  state.silentRounds = 0;
   render();
-  if (text) sendText(text);
 }
 
-async function toggleMic() {
+function toggleMic() {
+  // Talking over the assistant: stop it, stay quiet for the rest of this turn, then listen.
+  if (state.speaking) {
+    state.skipSpeech = true;
+    state.voiceOn = true;
+    speech.stopSpeaking();
+    return;
+  }
   if (state.listening) {
     state.voiceOn = false;
     speech.stopListening();
+    state.send?.({ type: 'fluent:stop-listen' }).catch(() => {});
     return;
   }
-  if (!(await micAllowed())) return askForMic();
   banner('');
-  speech.stopSpeaking();
   state.voiceOn = true;
-  listenOnce();
+  state.silentRounds = 0;
+  render();
+  listenOnce(true);
 }
 
 // ---------- wiring ----------
@@ -380,7 +468,12 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     if (state.busy) state.pendingRescan = true;
     else runTurn(() => state.agent.rescan());
   }
-  if (msg?.type === 'fluent:mic-granted' && state.agent) toggleMic();
+  if (msg?.type === 'fluent:mic-granted') {
+    banner('');
+    $('settings-note').textContent = 'Microphone allowed';
+    state.micOk = false; // re-check now that permission changed
+    if (state.agent && state.mode === 'listen' && !state.listening) toggleMic();
+  }
 });
 
 // The page was reloaded or navigated: the old conversation no longer matches it.

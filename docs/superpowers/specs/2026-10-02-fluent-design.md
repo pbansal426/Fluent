@@ -15,6 +15,22 @@ A Chrome extension. On any web form it:
 3. Makes the user type sensitive values (SSN, passport, licence, card and account numbers, passwords, member IDs) and long free-text answers. Sensitive values never reach the model or the microphone.
 4. Never submits the form; it ends by asking the user to review and submit.
 
+## Principle: Fluent interprets, it never answers
+
+The assistant is strictly an interpreter. It never puts words in the user's mouth: no guessing, assuming, completing, defaulting or suggesting an answer. It may explain what a field is asking for; it may not propose what to put there. Enforced in three places:
+
+- The turn prompt and the translation prompt both forbid inventing or suggesting answers.
+- `Agent.inventedNumber`: a number (3+ digits) the model writes must appear in what the user just said, or in an answer already on the form. Otherwise the fill is dropped.
+- The end-to-end test answers "I don't know, what should I put?" and requires those fields to stay empty.
+
+## Voice
+
+Hands-free by default (setting: "Hands-free conversation"). After the assistant speaks it listens on its own, keeps listening through up to three silent rounds, then pauses until the mic is tapped. Tapping the mic while it is talking cuts it off and starts listening. Questions are natural spoken questions generated with the translations ("What is your last name?"), not labels read aloud. A bare "skip" is handled in code without a model call.
+
+This is turn-based, not full-duplex like Gemini Live: Chrome's speech recognition would hear the assistant's own voice, so it cannot listen while speaking. True barge-in by voice needs a streaming speech model.
+
+Microphone: the side panel cannot show Chrome's permission prompt, so the first tap opens `panel/permission.html` to grant it once. If recognition is still refused inside the panel, it runs inside the form's page instead (`content/listen.js`). Every failure shows its raw error code in the panel.
+
 ## Scope
 
 - **In:** HTML web forms, voice + translation.

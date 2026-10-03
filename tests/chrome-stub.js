@@ -1,7 +1,7 @@
 // Stand-in for the chrome.* extension APIs, so the real side panel can run in an ordinary page
 // (tests/panel-sim.html) next to the demo form. Speech is off by default here.
 (() => {
-  const store = { settings: { speak: false, ...(window.parent.SIM_SETTINGS || {}) } };
+  const store = { settings: { speak: false, live: false, ...(window.parent.SIM_SETTINGS || {}) } };
   const pageFrame = () => window.parent.document.getElementById('page');
   const F = () => pageFrame().contentWindow.__fluent;
 

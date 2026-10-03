@@ -137,7 +137,7 @@ export class Agent {
       // Small models sometimes hand the label back untranslated; for English there is a second source.
       const english = /^english$/i.test(this.userLang) && t?.english;
       const label = (t?.label && t.label !== f.label ? t.label : english) || t?.label || f.label;
-      const tr = { label, explanation: t?.explanation || '', options, section: f.section ? t?.section || f.section : '' };
+      const tr = { label, explanation: t?.explanation || '', question: (t?.question || '').trim(), options, section: f.section ? t?.section || f.section : '' };
       this.translations.set(f.id, tr);
       applied.push({ id: f.id, ...tr });
       // The privacy rules read English; on a form in another language, check the English label too.
@@ -175,11 +175,23 @@ export class Agent {
 
   question(field) {
     const t = this.tr(field);
-    const parts = [this.spokenLabel(field)];
-    if (t.explanation) parts.push(t.explanation);
-    if (field.kind === 'checkbox') parts.push(this.phrases.checkbox);
-    else if (t.options.length && t.options.length <= MAX_SPOKEN_OPTIONS) parts.push(`${this.phrases.options}: ${t.options.join(', ')}.`);
-    if (!field.required && field.kind !== 'checkbox') parts.push(this.phrases.optional);
+    const parts = [];
+    if (t.question) {
+      // Conversational: a natural question, with the section named when it changes.
+      if (t.section && field.section !== this.lastSection) parts.push(sentence(t.section));
+      this.lastSection = field.section;
+      parts.push(t.question);
+    } else {
+      parts.push(this.spokenLabel(field));
+      if (t.explanation) parts.push(t.explanation);
+      if (field.kind === 'checkbox') parts.push(this.phrases.checkbox);
+    }
+    if (field.kind !== 'checkbox' && t.options.length && t.options.length <= MAX_SPOKEN_OPTIONS) parts.push(`${this.phrases.options}: ${t.options.join(', ')}.`);
+    // Said once, not after every question.
+    if (!field.required && !this.saidSkipHint) {
+      this.saidSkipHint = true;
+      parts.push(this.phrases.optional);
+    }
     return parts.join(' ');
   }
 
@@ -201,7 +213,8 @@ export class Agent {
       await this.ui.say(`${this.spokenLabel(next)} ${next.sensitive ? this.phrases.type_private : this.phrases.type_long}`);
     } else {
       this.setMode('listen');
-      await this.ui.say(this.question(next));
+      this.lastAsked = this.question(next);
+      await this.ui.say(this.lastAsked);
     }
   }
 
@@ -232,7 +245,19 @@ export class Agent {
     }
   }
 
+  // A bare "skip" (in English or the user's language) needs no interpreting.
+  isSkip(text) {
+    const norm = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    const said = norm(text);
+    return !!said && [norm(this.phrases.skip_word), norm(this.phrases.btn_skip), 'skip'].includes(said);
+  }
+
   async turn(text) {
+    if (this.current && this.mode === 'listen' && this.isSkip(text)) {
+      this.history.push(`- User said "${text}"; ${this.current.label} was skipped.`);
+      this.skipped.add(this.current.id);
+      return this.advance();
+    }
     const res = await this.llm.chat({
       messages: [
         {
@@ -244,6 +269,7 @@ export class Agent {
             fields: this.fieldsForModel(),
             history: this.history.slice(-HISTORY_TURNS),
             context: this.context,
+            asked: this.lastAsked,
           }),
         },
         { role: 'user', content: text },
@@ -267,6 +293,8 @@ export class Agent {
             refusedPrivate = true;
             continue;
           }
+          // Fluent only interprets: a number the user never gave does not go on the form.
+          if (this.inventedNumber(String(v.value), text)) continue;
           const r = await this.page.fill(field.id, String(v.value));
           if (!r?.ok) continue;
           this.filled.add(field.id);
@@ -296,12 +324,25 @@ export class Agent {
 
     if (done.length) {
       this.ui.filled(done);
-      await this.ui.say(`${this.phrases.filled} ${done.map((d) => this.readBack(d)).join('. ')}.`);
+      await this.ui.say(`${this.phrases.filled} ${done.map((d) => this.readBack(d).replace(/\.+$/, '')).join('. ')}.`);
     }
     if (refusedPrivate) await this.ui.say(this.phrases.private_refused);
     if (progressed) return this.advance();
     if (reply) return this.ui.say(reply);
     if (!refusedPrivate) await this.ui.say(this.phrases.not_understood);
+  }
+
+  // True when `value` contains a number (3+ digits) that appears neither in what the user just said
+  // nor in an answer already on the form ("same as box 1"). Spoken-out numbers ("fifty two thousand")
+  // carry no digits to compare, so they are let through.
+  inventedNumber(value, said) {
+    const digits = (s) => String(s).replace(/\D/g, '');
+    const saidDigits = digits(said);
+    if (!saidDigits) return false;
+    const known = [saidDigits, ...[...this.values.values()].map(digits)];
+    // Compared group by group, so reformatting ("3 de marzo de 1998" -> 1998-03-03, 52000 -> 52,000.00) passes.
+    const groups = value.match(/\d{3,}/g) || [];
+    return groups.some((group) => !known.some((k) => k.includes(group)));
   }
 
   // Read choices back in the user's language, everything else as written.

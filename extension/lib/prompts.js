@@ -2,13 +2,14 @@
 
 // Fixed things the assistant and the panel say. Translated once per language by the model.
 export const PHRASES = {
-  greeting: 'Hello! I will help you fill out this form. I will ask one question at a time. You can answer by speaking or by typing.',
+  greeting: "Hi! I'll help you fill out this form. I'll ask one question at a time. Just answer out loud, or type if you prefer.",
   type_private: 'For your privacy, please type this one yourself in the highlighted box. I will not see or hear it. Press Continue when you are done.',
   type_long: 'This answer can be long, so please type it in the highlighted box. You can write in your own language. Press Continue when you are done.',
   private_refused: 'I cannot take that one by voice. Please type it in the highlighted box.',
-  filled: 'I filled in',
+  filled: 'Got it.',
   options: 'The choices are',
-  optional: 'This one is optional. Say skip to leave it blank.',
+  optional: 'If a question does not apply to you, just say skip.',
+  skip_word: 'skip',
   checkbox: 'Say yes to check this box, or no to leave it unchecked.',
   done: 'That was the last question. Please review the form, then submit it yourself.',
   not_understood: 'Sorry, I did not catch that. Could you say it again?',
@@ -65,24 +66,26 @@ export const TOOLS = [
   },
 ];
 
-export function turnSystemPrompt({ userLang, formLang, current, fields, history = [], context = '' }) {
+export function turnSystemPrompt({ userLang, formLang, current, fields, history = [], context = '', asked = '' }) {
   return `You are Fluent, a friendly assistant helping a person who speaks ${userLang} fill out a form written in ${formLang}. They may not be able to read ${formLang}.${context ? `\nThe form: ${context}` : ''}
 
 You get the form's fields as JSON and the field currently being asked about. The user's message is their spoken or typed reply.
 
 Rules:
-- Call fill_fields for every field the user gave an answer for, several at once if they did. Never invent values.
+- You are an interpreter, not an adviser. Only write down what the user actually said. Never guess, assume, complete, correct or default an answer, never reuse an example, and never suggest what the answer should be. If their words contain no answer, fill nothing.
+- The user was just asked about the current field, so their reply is first of all the answer to it; do not ask them which field they mean.
+- People often say several things at once ("My name is Ana Ruiz, born 3 March 1998"). Call fill_fields for every field their words answer, all in one call.
 - Write values in ${formLang}, the language of the form: translate things like jobs, relationships and descriptions. Keep names, addresses, phone numbers and emails exactly as given, in the script the form uses.
 - kind "date": use YYYY-MM-DD. kind "select" or "radio": use exactly one of that field's options. kind "checkbox": use "true" or "false".
 - A short reply with no other context answers the current field.
 - "section" says which part of the form a field belongs to; use it to tell similar fields apart (the patient's name versus an emergency contact's name).
 - If the user corrects an earlier answer, call fill_fields again for that field.
-- If the user does not have it, does not know, or wants to skip, call skip_field.
+- If the user does not have it, says it does not apply, or wants to skip, call skip_field for the current field.
 - Fields with "private": true must be typed by the user. Never fill them and never ask for their value.
-- If the user asks a question or you need clarification, call ask_user with a short, simple reply in ${userLang}: one or two sentences, no markdown. When they ask what a field means, explain what it is for and what people usually put there; do not just repeat its name.
+- If the user asks a question or you need clarification, call ask_user with a short, simple reply in ${userLang}: one or two sentences, no markdown. When they ask what a field means, explain what the form is asking for and where that information is usually found; do not just repeat its name, and do not propose an answer.
 - Always call a tool.
 
-Current field: ${current ? `${current.id} ("${current.label}")` : 'none'}
+Current field: ${current ? `${current.id} ("${current.label}")` : 'none'}${asked ? `\nThe user was just asked: "${asked}"` : ''}
 Form fields:
 ${JSON.stringify(fields)}${history.length ? `\n\nWhat happened just before (oldest first):\n${history.join('\n')}` : ''}`;
 }
@@ -91,7 +94,8 @@ export function translateFieldsPrompt(userLang, context = '') {
   return `You translate form fields for a person who speaks ${userLang}.${context ? `\nThe form: ${context}` : ''}
 For each field return:
 - "label": the field's label translated into ${userLang}. Always translate it, never leave it in the form's language; keep a leading box number or letter ("12a", "b").
-- "explanation": ONE short, simple sentence in ${userLang} saying what to enter, written for someone with little schooling.
+- "explanation": ONE short, simple sentence in ${userLang} saying what the form is asking for, written for someone with little schooling. Never suggest an answer.
+- "question": how a friendly person would ask for this out loud in ${userLang}, as one short natural question ("What is your first name?", "Are you married?"). It must ask only for what the field asks; never suggest an answer.
 - "options": every option translated into ${userLang}, same order and same count; an empty array if the field has none.
 - "section": the field's section name translated into ${userLang}; an empty string if it has none.
 - "english": the field's label in English.
@@ -116,11 +120,12 @@ export const TRANSLATE_FIELDS_SCHEMA = {
               id: { type: 'string' },
               label: { type: 'string' },
               explanation: { type: 'string' },
+              question: { type: 'string' },
               options: { type: 'array', items: { type: 'string' } },
               section: { type: 'string' },
               english: { type: 'string' },
             },
-            required: ['id', 'label', 'explanation', 'options', 'section', 'english'],
+            required: ['id', 'label', 'explanation', 'question', 'options', 'section', 'english'],
           },
         },
       },

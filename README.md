@@ -8,7 +8,9 @@ Fill out any web form in your own language. Fluent translates the form in place 
 2. **Load the extension:** `chrome://extensions` → Developer mode → Load unpacked → pick the `extension/` folder.
 3. **Demo form:** `npm run demo`, then open <http://localhost:8765/demo/intake.html>.
 4. Click the Fluent icon to open the side panel, pick a language, press the start button.
-5. First time you tap the microphone, a tab opens asking for permission. Allow it, then tap the mic again.
+5. Voice is hands-free: the assistant speaks, then listens. The first time, tap the microphone; a tab opens asking for permission. Allow it, then tap the mic again. Tap the mic while it is talking to interrupt.
+
+If the microphone does not work, the panel shows a yellow note with the reason and an error code (for example `not-allowed` or `network`). On a Mac, Chrome also needs microphone access in System Settings → Privacy & Security → Microphone.
 
 ### PDF forms (Spanish W-2 demo)
 

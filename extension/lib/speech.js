@@ -34,7 +34,11 @@ export function createSpeech() {
   function pickVoice(voices, lang) {
     const prefix = lang.split('-')[0].toLowerCase();
     const same = voices.filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith(prefix));
-    return same.find((v) => v.lang.toLowerCase() === lang.toLowerCase()) || same[0] || null;
+    if (!same.length) return null;
+    // Prefer the most natural-sounding voice available, then the exact regional match.
+    const score = (v) =>
+      (/natural|neural|premium|enhanced|siri/i.test(v.name) ? 4 : 0) + (/google/i.test(v.name) ? 2 : 0) + (v.lang.toLowerCase() === lang.toLowerCase() ? 1 : 0);
+    return same.reduce((best, v) => (score(v) > score(best) ? v : best));
   }
 
   // Long utterances get cut off in Chrome, so speak sentence by sentence.
@@ -53,7 +57,7 @@ export function createSpeech() {
         const u = new SpeechSynthesisUtterance(part);
         u.lang = lang;
         if (voice) u.voice = voice;
-        u.rate = 0.95;
+        u.rate = 1;
         u.onend = u.onerror = resolve;
         // Chrome sometimes never fires onend; don't let the conversation hang on it.
         setTimeout(resolve, 4000 + part.length * 150);

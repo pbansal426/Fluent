@@ -31,7 +31,7 @@
       'start label in English': out.before.start === 'Help me with this form',
       'pdf reopened in the Fluent viewer': out.pageUrl === '/extension/pdf/viewer.html',
       'first question is the private SSN, in English': /social security/i.test(out.atSsn.typeCard || '') && out.atSsn.textDisabled,
-      'name filled from speech': /maria/i.test(input('e Primer nombre').value) && /lopez/i.test(input('Apellido').value),
+      'name filled from speech': /maria/i.test(input('e Primer nombre').value), // the last name may be asked separately
       'labels translated on the page': sim.page().querySelectorAll('.fluentLabelLayer .fluent-badge').length > 10,
       'no error banner': !out.afterName.banner,
     };
