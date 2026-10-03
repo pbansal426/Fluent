@@ -9,15 +9,14 @@ Fill out any web form in your own language. Fluent translates the form in place 
 
 ### Sharing the demo on a public link
 
-1. Create an OpenRouter key **with a spending cap** (a few dollars is plenty) and keep it only in your terminal:
-   `export OPENROUTER_API_KEY=sk-or-...`
-2. `npm run demo` (same terminal). It prints "shared OpenRouter key on".
-3. In a second terminal, share it: `ssh -R 80:127.0.0.1:8765 nokey@localhost.run`, or `brew install cloudflared` and
-   `cloudflared tunnel --url http://127.0.0.1:8765`. Paste the `https://…` link it prints into Devpost.
+1. Create an OpenRouter key **with a spending cap** (a few dollars is plenty).
+2. Open the Terminal app and run **one command**: `~/Dev/Fluent/tools/share-demo.sh`
+3. Paste the key when it asks (it stays hidden), press Enter, and wait for the line with `https://…lhr.life`. That is your public link.
+   Press Ctrl-C to stop. (`NO_TUNNEL=1` runs the demo without a public link.)
 
 Visitors need no key. The server keeps your key private, pins visitors to one model (`DEMO_MODEL`), caps reply length,
 rate-limits each visitor, serves only the demo and sample forms, never forwards to anything but AI providers, and never logs
-a visitor's conversation. The link works while your laptop is awake and the demo is running. Use Chrome (speech recognition).
+a visitor's conversation. The link works while your laptop is awake and the script is running. Use Chrome (speech recognition).
 
 ## Run it (as a Chrome extension)
 
