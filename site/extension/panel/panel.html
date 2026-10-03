@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fluent</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<header>
+  <div class="brand">Fluent</div>
+  <select id="lang" aria-label="Your language"></select>
+  <button id="report-btn" class="icon" aria-label="Report a problem" title="Report a problem: type what went wrong in the box first if you like" hidden>
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>
+  </button>
+  <button id="settings-btn" class="icon" aria-label="Settings" title="Settings">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2.5"/><circle cx="9" cy="12" r="2.5"/><circle cx="17" cy="18" r="2.5"/></svg>
+  </button>
+</header>
+
+<section id="settings" hidden>
+  <label>AI endpoint (OpenAI-compatible)<input id="base-url" type="url" spellcheck="false"></label>
+  <label>Model<input id="model" list="models" spellcheck="false"><datalist id="models"></datalist></label>
+  <label>AI key (optional): paste any key from OpenAI, Claude, Gemini, Groq, OpenRouter or xAI and Fluent sets itself up<input id="api-key" type="password" autocomplete="off" spellcheck="false"></label>
+  <label class="check"><input id="speak" type="checkbox"> Speak replies aloud</label>
+  <label class="check"><input id="live" type="checkbox"> Hands-free conversation (listen automatically after speaking)</label>
+  <label class="check"><input id="no-think" type="checkbox"> Turn off model "thinking" (much faster)</label>
+  <div class="row">
+    <button id="save-settings" class="primary small">Save</button>
+    <button id="grant-mic" class="small">Allow microphone</button>
+    <button id="use-local" class="small">Use local model</button>
+    <span id="settings-note" class="note"></span>
+  </div>
+</section>
+
+<div id="banner" hidden></div>
+
+<main>
+  <section id="welcome">
+    <svg class="hero" viewBox="0 0 48 48" aria-hidden="true"><rect x="9" y="5" width="30" height="38" rx="4"/><path d="M16 15h16M16 23h16M16 31h9"/><path d="M29 32l3 3 6-7"/></svg>
+    <button id="start" class="primary big"></button>
+    <p class="note" id="away-note" hidden></p>
+    <button id="back-tab" hidden></button>
+    <p class="note" id="welcome-note">Open a page or PDF with a form, choose your language above, then press the button.</p>
+  </section>
+
+  <section id="chat" hidden>
+    <div id="chat-head">
+      <p id="form-language" class="note" aria-live="polite"></p>
+      <label class="check toggle"><input id="show-tr" type="checkbox" checked> <span id="show-tr-label">Show translations</span></label>
+    </div>
+    <div id="transcript" aria-live="polite"></div>
+    <div id="type-card" hidden>
+      <div id="type-text"></div>
+      <div class="row">
+        <button id="continue" class="primary"></button>
+        <button id="translate" hidden></button>
+        <button id="skip"></button>
+        <button id="repeat-card"></button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer id="composer" hidden>
+  <div id="live-line"><span id="live-status" data-state="idle" aria-live="polite"></span></div>
+  <div id="interim" class="note" hidden></div>
+  <form id="send-form">
+    <button id="mic" type="button" class="mic" aria-label="Microphone" title="Microphone">
+      <svg class="ico ico-mic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>
+      <svg class="ico ico-wave" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 6.5v11M12 3.5v17M16 7.5v9M20 10v4"/></svg>
+    </button>
+    <input id="text" type="text" autocomplete="off" dir="auto">
+    <button id="repeat" type="button" class="icon" aria-label="Repeat" title="Repeat">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v5h-5"/></svg>
+    </button>
+    <button id="reveal" type="button" class="icon" aria-label="Show or hide what I type" title="Show or hide" hidden>
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+    <button id="send" class="primary send" aria-label="Send">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </button>
+  </form>
+  <div id="build" class="build"></div>
+</footer>
+
+<script type="module" src="panel.js"></script>
+</body>
+</html>

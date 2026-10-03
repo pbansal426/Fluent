@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fluent: fill any form in your language</title>
+<style>
+  :root { --bar: #101826; --ink: #e8eefc; --muted: #9bb0d4; --brand: #5b8def; --panel: 440px; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  body { display: grid; grid-template-rows: 54px 1fr; background: #1b2434; }
+  header { display: flex; align-items: center; gap: 14px; padding: 0 16px; background: var(--bar); color: var(--ink); overflow-x: auto; white-space: nowrap; }
+  header .brand { font-weight: 700; font-size: 18px; letter-spacing: .01em; }
+  header .tag { color: var(--muted); font-size: 13px; }
+  @media (max-width: 1500px) { header .tag { display: none; } }
+  button.upload { flex: none; }
+  header .spacer { flex: 1; }
+  button.upload { background: var(--brand); color: #fff; border: 0; border-radius: 10px; padding: 9px 16px; font: 600 14px system-ui; cursor: pointer; display: inline-flex; gap: 8px; align-items: center; }
+  button.upload:hover { filter: brightness(1.08); }
+  .samples { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; }
+  .samples button { background: transparent; color: var(--ink); border: 1px solid #34425e; border-radius: 999px; padding: 6px 12px; font: 13px system-ui; cursor: pointer; }
+  .samples button:hover { border-color: var(--brand); }
+  main { display: grid; grid-template-columns: 1fr var(--panel); min-height: 0; }
+  #form { width: 100%; height: 100%; border: 0; background: #fff; }
+  #side { width: 100%; height: 100%; border: 0; border-left: 1px solid #000; background: #12161d; }
+  #drop { position: absolute; inset: 54px var(--panel) 0 0; display: none; place-items: center; background: rgba(16,24,38,.82); color: #fff; font-size: 22px; font-weight: 600; z-index: 5; border: 3px dashed var(--brand); }
+  body.dragging #drop { display: grid; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; grid-template-rows: 1fr 55vh; } :root { --panel: 0px; } }
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">Fluent</span>
+  <span class="tag">Fill any form in your own language</span>
+  <span class="spacer"></span>
+  <button class="upload" id="upload" type="button">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
+    Upload a PDF form
+  </button>
+  <span class="samples" id="samples">or try a sample:</span>
+  <input id="file" type="file" accept="application/pdf,.pdf" hidden>
+</header>
+<main>
+  <iframe id="form" title="The form" src="/extension/pdf/viewer.html"></iframe>
+  <iframe id="side" title="Fluent assistant" allow="microphone; autoplay"></iframe>
+</main>
+<div id="nokey" hidden style="position:absolute;left:0;right:var(--panel);bottom:0;z-index:4;background:#fff7e0;color:#4a3b00;padding:10px 16px;font:14px system-ui">This demo needs an AI key. Open the sliders icon in the sidebar and paste yours (OpenRouter, OpenAI, Claude, Gemini, Groq or xAI).</div>
+<div id="drop">Drop a PDF form here</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  // Optional settings in the address (?lang=es&speak=0&live=0), for rehearsals and tests.
+  {
+    const q = new URLSearchParams(location.search);
+    const store = (() => { try { return JSON.parse(localStorage.getItem('fluent-demo-store') || '{}'); } catch { return {}; } })();
+    const settings = { ...(store.settings || {}) };
+    if (q.has('lang')) settings.lang = q.get('lang');
+    if (q.has('speak')) settings.speak = q.get('speak') !== '0';
+    if (q.has('live')) settings.live = q.get('live') !== '0';
+    if ([...q.keys()].some((k) => ['lang', 'speak', 'live'].includes(k))) {
+      try { localStorage.setItem('fluent-demo-store', JSON.stringify({ ...store, settings })); } catch {}
+    }
+  }
+  const VIEWER = '/extension/pdf/viewer.html';
+
+  // What the sidebar's shim uses to reach the form.
+  window.demo = {
+    formFrame: () => $('form'),
+    onUpdated: [], // the sidebar listens: a new form means a fresh conversation
+    announce() { for (const fn of this.onUpdated) fn(1, { status: 'loading' }, { id: 1 }); },
+    // A PDF the user picked (or dropped): shown in Fluent's own viewer.
+    async loadFile(file) {
+      if (!file) return;
+      this.announce();
+      const frame = $('form');
+      if (!frame.contentWindow.location.pathname.endsWith('/pdf/viewer.html')) {
+        await new Promise((resolve) => { frame.addEventListener('load', resolve, { once: true }); frame.src = VIEWER; });
+      }
+      for (let i = 0; i < 100 && !frame.contentWindow.__fluent?.openFile; i++) await new Promise((r) => setTimeout(r, 100));
+      await frame.contentWindow.__fluent.openFile(file);
+    },
+    // A sample (a PDF in the repo or a web form).
+    loadUrl(url) {
+      this.announce();
+      $('form').src = /\.pdf($|[?#])/i.test(url) ? `${VIEWER}?file=${encodeURIComponent(url)}` : url;
+    },
+  };
+
+  $('upload').addEventListener('click', () => $('file').click());
+  $('file').addEventListener('change', (e) => { demo.loadFile(e.target.files[0]); e.target.value = ''; });
+  addEventListener('dragover', (e) => { e.preventDefault(); document.body.classList.add('dragging'); });
+  addEventListener('dragleave', (e) => { if (e.relatedTarget === null) document.body.classList.remove('dragging'); });
+  addEventListener('drop', (e) => {
+    e.preventDefault();
+    document.body.classList.remove('dragging');
+    const file = [...e.dataTransfer.files].find((f) => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name));
+    if (file) demo.loadFile(file);
+  });
+
+  fetch('/samples.json').then((r) => r.json()).then((list) => {
+    for (const s of list) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: s.name });
+      b.addEventListener('click', () => demo.loadUrl(s.url));
+      $('samples').appendChild(b);
+    }
+  }).catch(() => {});
+
+  // The sidebar is the real Fluent panel, run here with a small shim instead of the extension APIs.
+  // A visitor on a public link has no LM Studio: the sidebar starts on OpenRouter (the server adds the shared key), unless
+  // they already chose something themselves. The owner, on this machine, keeps whatever they had.
+  const prepare = fetch('/config.json').then((r) => r.json()).then((cfg) => {
+    if (cfg.local) return;
+    try {
+      const store = JSON.parse(localStorage.getItem('fluent-demo-store') || '{}');
+      const settings = store.settings || {};
+      if (!settings.baseUrl || /localhost|127\.0\.0\.1/.test(settings.baseUrl)) {
+        localStorage.setItem('fluent-demo-store', JSON.stringify({ ...store, settings: { ...settings, baseUrl: 'https://openrouter.ai/api/v1', model: cfg.model, apiKey: settings.apiKey || '' } }));
+      }
+    } catch {}
+    if (!cfg.sharedKey) $('nokey').hidden = false;
+  }).catch(() => {});
+
+  prepare.then(() => fetch('/extension/panel/panel.html')).then((r) => r.text()).then((html) => {
+    $('side').srcdoc = html.replace('<head>', `<head><base href="${location.origin}/extension/panel/"><script src="${location.origin}/demo/app/chrome-shim.js"><\/script>`);
+  });
+</script>
+</body>
+</html>

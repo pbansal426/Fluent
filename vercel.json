@@ -1,0 +1,12 @@
+{
+  "buildCommand": "node tools/build-site.mjs",
+  "outputDirectory": "site",
+  "framework": null,
+  "rewrites": [
+    { "source": "/proxy", "destination": "/api/proxy" },
+    { "source": "/log", "destination": "/api/log" }
+  ],
+  "headers": [
+    { "source": "/(.*)", "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }, { "key": "Permissions-Policy", "value": "microphone=(self)" }] }
+  ]
+}

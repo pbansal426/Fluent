@@ -8,6 +8,9 @@ import { createServer } from 'node:http';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
+import { AI_HOSTS, cleanKey, createLimiter, buildUpstream } from './proxy-core.mjs';
+
+export { AI_HOSTS };
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
@@ -20,9 +23,6 @@ export const SAMPLE_NAMES = {
   'fw2.pdf': 'W-2 (English)', 'fw2_es.pdf': 'W-2 (Spanish)', 'fw4sp.pdf': 'W-4 (Spanish)', 'clinica-familiar-es.pdf': 'Clinic intake (Spanish PDF)',
 };
 
-// Where AI requests may go. Everything else is refused, so the forwarder cannot be used to reach other sites.
-export const AI_HOSTS = new Set(['openrouter.ai', 'api.openai.com', 'api.anthropic.com', 'generativelanguage.googleapis.com', 'api.groq.com', 'api.x.ai']);
-const LOCAL_AI = /^http:\/\/(localhost|127\.0\.0\.1):1234\//;
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const MAX_BODY = 1_000_000;
 
@@ -30,31 +30,16 @@ export function createDemoServer({ root, env = process.env, fetchImpl = (...a) =
   // The shared key lives on the server only: in the environment, or saved once in the private file .openrouter-key
   // next to the project (never served, never committed). Printable ASCII only, so pasted invisible characters cannot break it.
   const keyFromFile = (() => { try { return readFileSync(join(root, '.openrouter-key'), 'utf8'); } catch { return ''; } })();
-  const sharedKey = String(env.OPENROUTER_API_KEY || keyFromFile).replace(/[^\x21-\x7e]/g, '');
+  const sharedKey = cleanKey(env.OPENROUTER_API_KEY || keyFromFile);
   const sharedModel = env.DEMO_MODEL || 'openai/gpt-4o-mini';
   const maxTokens = Number(env.DEMO_MAX_TOKENS) || 3000;
-  const perWindow = Number(env.DEMO_RATE_PER_5MIN) || 80; // requests per visitor per 5 minutes
-  const perDay = Number(env.DEMO_RATE_PER_DAY) || 600; // requests per visitor per day
-  const globalDay = Number(env.DEMO_RATE_GLOBAL_DAY) || 5000; // all visitors together
   const logDir = join(root, 'logs');
-  const hits = new Map(); // visitor -> request times
-  let globalHits = [];
+  const limited = createLimiter(env, now);
 
   // Requests that reach us through a tunnel arrive from 127.0.0.1 too, but carry forwarding headers.
   const forwarded = (req) => req.headers['x-forwarded-for'] || req.headers['cf-connecting-ip'] || req.headers['x-real-ip'] || req.headers.forwarded || req.headers['x-forwarded-host'];
   const isLocal = (req) => LOOPBACK.has(req.socket.remoteAddress) && !forwarded(req) && /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(req.headers.host || '');
   const visitor = (req) => String(forwarded(req) || req.socket.remoteAddress).split(',')[0].trim();
-
-  function rateLimited(id) {
-    const t = now();
-    const mine = (hits.get(id) || []).filter((x) => t - x < 86_400_000);
-    globalHits = globalHits.filter((x) => t - x < 86_400_000);
-    if (mine.length >= perDay || globalHits.length >= globalDay || mine.filter((x) => t - x < 300_000).length >= perWindow) return true;
-    mine.push(t);
-    globalHits.push(t);
-    hits.set(id, mine);
-    return false;
-  }
 
   async function readBody(req) {
     const chunks = [];
@@ -71,36 +56,13 @@ export function createDemoServer({ root, env = process.env, fetchImpl = (...a) =
     const local = isLocal(req);
     let body;
     try { body = await readBody(req); } catch (e) { return res.writeHead(e.status || 400).end(e.message); }
-    let target;
-    try { target = new URL(String(req.headers['x-target-url'] || '')); } catch { return res.writeHead(400).end('bad target'); }
-    const ok = (target.protocol === 'https:' && AI_HOSTS.has(target.hostname)) || (local && LOCAL_AI.test(target.href));
-    if (!ok) return res.writeHead(403).end('That address is not allowed.');
-
-    const headers = {};
-    for (const [k, v] of Object.entries(req.headers)) {
-      if (!['host', 'origin', 'referer', 'x-target-url', 'x-target-method', 'content-length', 'connection', 'accept-encoding', 'cookie', 'x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'forwarded', 'x-forwarded-host', 'x-forwarded-proto'].includes(k) && !k.startsWith('sec-')) headers[k] = v;
-    }
-    const method = req.headers['x-target-method'] || 'POST';
-    let payload = ['GET', 'HEAD'].includes(method) ? undefined : body;
-
-    // A visitor without a key of their own uses the shared one: limited, pinned to one model, replies capped.
-    if (headers.authorization) headers.authorization = String(headers.authorization).replace(/[^\x20-\x7e]/g, '');
-    const ownKey = /^Bearer\s+\S{8,}/.test(String(headers.authorization || ''));
-    if (!local && target.hostname === 'openrouter.ai' && !ownKey) {
-      if (!sharedKey) return res.writeHead(503).end('No shared key is set up on this server.');
-      if (rateLimited(visitor(req))) return res.writeHead(429, { 'content-type': 'text/plain' }).end('The demo is busy right now. Please try again in a few minutes.');
-      headers.authorization = `Bearer ${sharedKey}`;
-      if (payload && /\/chat\/completions$/.test(target.pathname)) {
-        try {
-          const json = JSON.parse(payload.toString('utf8'));
-          json.model = sharedModel;
-          json.max_tokens = Math.min(Number(json.max_tokens) || maxTokens, maxTokens);
-          payload = Buffer.from(JSON.stringify(json));
-        } catch { return res.writeHead(400).end('bad body'); }
-      }
-    }
+    const plan = buildUpstream(
+      { target: req.headers['x-target-url'], method: req.headers['x-target-method'] || 'POST', headers: req.headers, body, local, visitor: visitor(req) },
+      { sharedKey, sharedModel, maxTokens, limited },
+    );
+    if (plan.refuse) return res.writeHead(plan.refuse.status, { 'content-type': 'text/plain' }).end(plan.refuse.text);
     try {
-      const upstream = await fetchImpl(target.href, { method, headers, body: payload });
+      const upstream = await fetchImpl(plan.url, plan.init);
       const out = Buffer.from(await upstream.arrayBuffer());
       res.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') || 'application/octet-stream' }).end(out);
     } catch (e) {
