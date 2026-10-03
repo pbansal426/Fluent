@@ -260,6 +260,22 @@ test('private value typed in chat goes straight to the field, never to the model
   assert.equal(await agent.submitPrivate('nope'), false); // not a private field any more
 });
 
+test('a long PDF: when a page is finished the assistant moves on to the next page, then finishes', async () => {
+  const { agent, log } = setup([fill(['f1', 'Ana'])]);
+  const pages = [[FIELDS[0]], [{ ...base, id: 'g1', kind: 'text', label: 'City' }]];
+  let at = 0;
+  agent.page.scan = async () => ({ fields: structuredClone(pages[at]), texts: [], pageLang: 'en' });
+  agent.page.nextPage = async () => (at < pages.length - 1 ? (at++, { moved: true }) : { moved: false });
+  await agent.start();
+  await agent.handleUser('Ana');
+  assert.ok(log.said.includes(agent.phrases.next_page));
+  assert.equal(agent.current.id, 'g1');
+  assert.match(log.said.at(-1), /ES:City/);
+  await agent.handleUser('skip');
+  assert.equal(agent.mode, 'done');
+  assert.equal(log.said.at(-1), agent.phrases.done);
+});
+
 test('form view: fields listed without private values; edits fill the page and advance', async () => {
   const { agent, dom } = setup([fill(['f1', 'Ana'])]);
   await agent.start();

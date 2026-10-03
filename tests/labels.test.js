@@ -122,3 +122,18 @@ test('a form printed twice on one page is detected', () => {
   assert.equal(twins.get('a2'), 'a');
   assert.equal(findTwins(upper, 792).size, 0);
 });
+
+test("the PDF's own tooltip labels fields that have no readable caption above or below", () => {
+  const ws = [
+    { ...W('a', 100, 600, 300, 612), tip: 'Part 2. Information About You. 1.B. Enter Given Name, First Name.' }, // caption sits to the left
+    { ...W('b', 100, 400, 300, 412), tip: 'Text Field 3' }, // generic: ignored
+    { ...W('c', 100, 200, 300, 212), tip: 'Date of birth.' }, // has a good caption of its own
+    { ...W('d', 100, 100, 300, 112), tip: 'Alien Registration Number' }, // only junk above
+  ];
+  const items = [T(100, 216, 60, 'Date of Birth'), T(100, 116, 4, '.')];
+  const { labels } = labelWidgets(ws, items, 800);
+  assert.equal(labels.get('a').text, 'Information About You: 1.B Enter Given Name, First Name');
+  assert.equal(labels.get('b'), undefined);
+  assert.equal(labels.get('c').text, 'Date of Birth');
+  assert.equal(labels.get('d').text, 'Alien Registration Number');
+});

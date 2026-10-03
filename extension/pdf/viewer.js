@@ -39,17 +39,28 @@ async function open(data, name) {
   $('stage').hidden = false;
   $('download').disabled = false;
   // Start on the first page that has something to fill in.
-  state.pageNum = 1;
-  for (let n = 1; n <= state.doc.numPages; n++) {
-    const page = await state.doc.getPage(n);
-    const widgets = (await page.getAnnotations()).filter((a) => a.subtype === 'Widget' && !a.readOnly);
-    if (widgets.length) {
-      state.pageNum = n;
-      break;
-    }
-  }
+  state.pageNum = (await nextFillablePage(1)) || 1;
   await render();
 }
+
+// The first page at or after `from` that has something to fill in, or 0.
+async function nextFillablePage(from) {
+  for (let n = from; n <= state.doc.numPages; n++) {
+    const page = await state.doc.getPage(n);
+    const widgets = (await page.getAnnotations()).filter((a) => a.subtype === 'Widget' && !a.readOnly);
+    if (widgets.length) return n;
+  }
+  return 0;
+}
+
+// The assistant finished this page: show the next one that has fields (long forms such as USCIS ones).
+F.nextPage = async () => {
+  const n = await nextFillablePage(state.pageNum + 1);
+  if (!n) return { moved: false };
+  state.pageNum = n;
+  await render();
+  return { moved: true, page: n, pages: state.doc.numPages };
+};
 
 async function render() {
   F.pdfReady = false;
@@ -101,6 +112,12 @@ async function render() {
     fieldObjects: null,
   });
 
+  // Reading order (top to bottom, left to right), also the keyboard tab order.
+  const top = (el) => parseFloat(el.style.top) || 0;
+  const left = (el) => parseFloat(el.style.left) || 0;
+  const sections = [...layerDiv.children].sort((a, b) => (Math.abs(top(a) - top(b)) > 0.6 ? top(a) - top(b) : left(a) - left(b)));
+  layerDiv.append(...sections);
+
   const text = await page.getTextContent();
   attachLabels(annotations, text.items, viewport, pageHeight);
 
@@ -127,7 +144,7 @@ function anchor(tag, className, text, box, viewport) {
 }
 
 function attachLabels(annotations, textItems, viewport, pageHeight) {
-  const widgets = annotations.map((a) => ({ id: a.id, x1: a.rect[0], y1: a.rect[1], x2: a.rect[2], y2: a.rect[3] }));
+  const widgets = annotations.map((a) => ({ id: a.id, x1: a.rect[0], y1: a.rect[1], x2: a.rect[2], y2: a.rect[3], tip: a.alternativeText }));
   const items = textItems.map((it) => ({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width, h: it.height }));
   const { labels, texts, twins } = labelWidgets(widgets, items, pageHeight);
 

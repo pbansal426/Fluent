@@ -15,6 +15,7 @@
     'fluent:read': (m) => F.read(m.id),
     'fluent:focus': (m) => F.focus(m.id),
     'fluent:clear': () => F.clear(),
+    'fluent:next-page': () => (F.nextPage ? F.nextPage() : { moved: false }),
     'fluent:listen': (m) => F.listen(m.lang),
     'fluent:stop-listen': () => F.stopListening(),
   };

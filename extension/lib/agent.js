@@ -219,6 +219,12 @@ export class Agent {
     const next = target || this.nextField();
     this.current = next;
     if (!next) {
+      // A long PDF: carry on with the next page that has fields before calling it done.
+      const moved = await this.page.nextPage?.().catch(() => null);
+      if (moved?.moved) {
+        await this.ui.say(this.phrases.next_page);
+        return this.rescan();
+      }
       await this.page.highlight(null);
       this.setMode('done');
       await this.ui.say(this.phrases.done);

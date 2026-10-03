@@ -274,6 +274,7 @@ function bridge(send) {
     focus: (id) => send({ type: 'fluent:focus', id }),
     fill: (id, value) => send({ type: 'fluent:fill', id, value }),
     read: (id) => send({ type: 'fluent:read', id }),
+    nextPage: () => send({ type: 'fluent:next-page' }),
   };
 }
 
@@ -360,7 +361,7 @@ function phrasesFor(llm) {
     phraseJobs.set(
       code,
       (async () => {
-        const key = `phrases:v5:${code}`; // bump when PHRASES changes
+        const key = `phrases:v6:${code}`; // bump when PHRASES changes
         const cached = (await chrome.storage.local.get(key))[key];
         if (cached && Object.keys(PHRASES).every((k) => cached[k])) return cached;
         const phrases = await translatePhrases(llm, name);

@@ -47,6 +47,33 @@ export function findTwins(widgets, pageHeight) {
   return lower.length >= 5 && twins.size >= lower.length * 0.8 ? twins : new Map();
 }
 
+const GENERIC_TIP = /^(text|check ?box|radio( button)?|combo ?box|list ?box|field|button|text field|form field)\b[\s\d.:_-]*$/i;
+
+// A tooltip worth using as a label: real words, not "Text Field 3" or a bare field name.
+export function cleanTip(tip) {
+  const t = String(tip || '').replace(/\s+/g, ' ').trim().replace(/[.\s]+$/, '');
+  if (!/\p{L}{3}/u.test(t) || GENERIC_TIP.test(t) || /^[\w\[\]#.-]+$/.test(t) && /\d|\[/.test(t)) return '';
+  return compactTip(t);
+}
+
+const clip = (s, n) => (s.length <= n ? s : `${s.slice(0, n).replace(/\s+\S*$/, '')}…`);
+
+// "Part 2. Information About You. Your Full Legal Name. 1. A. Enter Family Name, Last Name"
+//   -> "Your Full Legal Name: 1.A Enter Family Name, Last Name"
+// The tooltips of government forms run "Part. Title. Group. [instructions]. item. action"; the question only
+// needs the group, the item number and the action.
+function compactTip(t) {
+  const matches = [...t.matchAll(/\b(\d+)\.\s?([A-Za-z])\.\s+/g)];
+  const m = matches.at(-1);
+  if (!m) return t.length <= 140 ? t : `…${t.slice(-120).replace(/^\S*\s+/, '')}`; // what tells fields apart is at the end
+  const before = t.slice(0, m.index).split(/\.\s+/).map((s) => s.trim()).filter(Boolean);
+  const action = clip(t.slice(m.index + m[0].length), 110);
+  const short = (s) => s && s.length <= 45 && !/^part\b/i.test(s);
+  const group = short(before[2]) ? before[2] : short(before.at(-1)) ? before.at(-1) : '';
+  const item = `${m[1]}.${m[2].toUpperCase()}`;
+  return group ? `${group}: ${item} ${action}` : `${item} ${action}`;
+}
+
 // Returns { labels: Map(id -> { text, box | null }), texts: [{ text, box }] }
 //   box  = where the caption is printed ({x, y, w, h}); null when the label was inferred from a neighbour
 //   texts = remaining printed lines (titles, instructions) worth translating
@@ -84,6 +111,16 @@ export function labelWidgets(widgets, items, pageHeight) {
       caption.forEach((it) => used.add(it));
       labels.set(w.id, { text: joinLines(caption), box: boxOf(caption), own: true });
     }
+  }
+
+  // 5. The PDF's own tooltip. Government forms carry full descriptions ("Part 2. Your Full Legal Name. 1.B. Enter
+  //    Given Name, First Name."), which beat guessing from position, so it fills in where no readable caption
+  //    sits above or below the field, or where the label would only be copied from a neighbour.
+  for (const w of active) {
+    const tip = cleanTip(w.tip);
+    if (!tip) continue;
+    const label = labels.get(w.id);
+    if (!label || label.own === false || !/\p{L}{3}/u.test(label.text)) labels.set(w.id, { text: tip, box: null, own: true });
   }
 
   // Repeated labels get numbered so they can be told apart: "State", "State (2)".
