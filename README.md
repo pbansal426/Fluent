@@ -7,6 +7,12 @@ Fill out any web form in your own language. Fluent translates the form in place 
 `npm run demo`, then open <http://localhost:8765/demo/app/>. The form is on the left and the same Fluent sidebar on the right.
 **Upload a PDF form** with the button (or drop a file on the page), or pick a sample. The server also forwards the AI requests, so LM Studio (or a cloud key pasted in the sidebar's settings) works from an ordinary web page; allow the microphone when the browser asks. Add `?lang=es` to the address to start in another language.
 
+### Updating the live site
+
+After changing anything: `~/Dev/Fluent/tools/deploy.sh` (or `npm run deploy`). It runs the tests, builds the site, publishes, and checks the live
+site; if any step fails nothing is published (or it says what is wrong). The live site only changes when you run it. To go back to the previous
+version: `npx vercel rollback` (Vercel keeps every earlier deployment).
+
 ### The permanent public site (Vercel)
 
 Live at **https://fluent-demo-chi.vercel.app**. Your laptop can be off. The OpenRouter key is stored only in the Vercel project's
