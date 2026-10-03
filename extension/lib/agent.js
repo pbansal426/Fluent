@@ -2,11 +2,14 @@
 // the model only translates and interprets what the user said.
 import { classify, redactPrivate } from './sensitive.js';
 import { groupChoices, matchOption } from './choices.js';
+import { validateValue } from './audit.js';
 import { detectLanguage, language } from './language.js';
 import {
   PHRASES,
   TOOLS,
   turnSystemPrompt,
+  overviewPrompt,
+  OVERVIEW_SCHEMA,
   translateFieldsPrompt,
   TRANSLATE_FIELDS_SCHEMA,
   translateTextsPrompt,
@@ -54,6 +57,7 @@ export class Agent {
     this.filled = new Set();
     this.skipped = new Set();
     this.history = [];
+    this.lastFill = null; // the last non-private answer written, so "no, I mean ..." can correct it
     this.helpCount = new Map(); // field id -> times the user got help without answering
     this.current = null;
     this.formLang = '';
@@ -88,9 +92,32 @@ export class Agent {
       if (!f.sensitive) this.values.set(f.id, f.value);
     }
     this.translating = this.translateAll(this.fields, scan.texts || []);
+    const overview = this.overview(scan); // asked now, spoken right after the greeting
     this.ui.status('ready');
     await this.ui.say(this.phrases.greeting);
+    const about = await overview;
+    if (about) await this.ui.say(about);
     await this.advance();
+  }
+
+  // One or two simple sentences, in the user's language, on what this form is. Never blocks the conversation.
+  async overview(scan) {
+    try {
+      const sections = [...new Set(this.fields.map((f) => f.section || (f.label.includes(': ') ? f.label.split(': ')[0] : '')).filter(Boolean))].slice(0, 8);
+      const out = await this.llm.chatJson({
+        messages: [
+          { role: 'system', content: overviewPrompt({ userLang: this.userLang, formLang: this.formLang, title: scan.title, context: this.context, sections, fieldCount: this.fields.length }) },
+          { role: 'user', content: JSON.stringify({ title: scan.title || '' }) },
+        ],
+        responseFormat: OVERVIEW_SCHEMA,
+        maxTokens: 300,
+      });
+      const text = String(out?.overview || '').trim();
+      this.log('overview', { text });
+      return text.length >= 10 && text.length <= 600 ? text : '';
+    } catch {
+      return '';
+    }
   }
 
   // The form grew or shrank (multi-step forms): pick up the new fields, keep what is done.
@@ -257,11 +284,13 @@ export class Agent {
     if (next.sensitive || next.long) {
       await this.page.focus(next.id);
       this.setMode('type');
-      await this.ui.say(`${this.spokenLabel(next)} ${next.sensitive ? this.phrases.type_private : this.phrases.type_long}`);
+      this.lastSpoken = `${this.spokenLabel(next)} ${next.sensitive ? this.phrases.type_private : this.phrases.type_long}`;
+      await this.ui.say(this.lastSpoken);
     } else {
       this.setMode('listen');
       this.lastAsked = this.question(next);
-      await this.ui.say(this.lastAsked);
+      this.lastSpoken = this.lastAsked;
+      await this.ui.say(this.lastSpoken);
     }
   }
 
@@ -300,6 +329,7 @@ export class Agent {
   }
 
   async turn(text) {
+    const startedAt = Date.now();
     if (this.current && this.mode === 'listen' && this.isSkip(text)) {
       this.history.push(`- User said "${text}"; ${this.current.label} was skipped.`);
       this.skipped.add(this.current.id);
@@ -321,6 +351,7 @@ export class Agent {
             context: this.context,
             asked: this.lastAsked,
             helped: this.helpCount.get(this.current?.id) || 0,
+            lastFilled: this.lastFill,
           }),
         },
         { role: 'user', content: said },
@@ -330,7 +361,7 @@ export class Agent {
       maxTokens: 800,
     });
 
-    this.log('turn', { said, calls: res.toolCalls.map((c) => ({ name: c.name, args: c.args })), content: res.content || undefined, current: this.current?.label });
+    this.log('turn', { said, calls: res.toolCalls.map((c) => ({ name: c.name, args: c.args })), content: res.content || undefined, current: this.current?.label, ms: Date.now() - startedAt });
     const done = [];
     const spoken = [];
     const navLog = [];
@@ -361,7 +392,20 @@ export class Agent {
             continue;
           }
           // Fluent only interprets: a number the user never gave does not go on the form.
-          if (!copy && this.inventedNumber(String(value), text)) continue;
+          if (!copy && this.inventedNumber(String(value), text)) {
+            this.log('reject', { field: field.label, value: String(value), reason: 'invented-number' });
+            continue;
+          }
+          // Obvious non-answers (a placeholder email, the whole sentence, half a phone number) are not written.
+          if (!copy) {
+            const check = validateValue(field, value, said);
+            if (!check.ok) {
+              this.log('reject', { field: field.label, value: String(value), reason: check.reason });
+              spoken.push(this.phrases[check.phrase]);
+              continue;
+            }
+            value = check.value;
+          }
           const r = await this.fillField(field, String(value));
           if (!r?.ok) continue;
           this.filled.add(field.id);
@@ -370,6 +414,7 @@ export class Agent {
           this.values.set(field.id, r.value);
           done.push({ id: field.id, label: this.tr(field).label, original: field.label, value: r.value });
           this.log('fill', { field: field.label, value: r.value });
+          this.lastFill = { field_id: field.id, label: field.label, value: r.value };
           if (field.members && /^(no|none|n\/a|not applicable)$/i.test(r.value)) this.skipDependents(field);
           progressed = true;
         }
@@ -548,6 +593,11 @@ export class Agent {
     } finally {
       this.busy = false;
     }
+  }
+
+  // Say the current question again (the Repeat button).
+  async repeat() {
+    if (this.current && this.lastSpoken && this.mode !== 'done') await this.ui.say(this.lastSpoken);
   }
 
   // Nobody answered for a while: ask again, gently, like a person waiting.

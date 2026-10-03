@@ -16,6 +16,33 @@ export const LANGUAGES = [
   { code: 'en', name: 'English', native: 'English', speech: 'en-US', start: 'Help me with this form' },
 ];
 
+// macOS ships joke voices next to the real ones; never pick those.
+const NOVELTY = /\b(albert|bad news|bahh|bells|boing|bubbles|cellos|deranged|good news|hysterical|jester|organ|superstar|trinoids|whisper|wobble|zarvox|fred|junior|kathy|ralph|princess)\b/i;
+
+// The most natural-sounding installed voice for a language: neural / premium / enhanced first, then network
+// voices (Google), then plain system voices; the exact regional match breaks ties.
+export function pickVoice(voices, lang) {
+  const prefix = lang.split('-')[0].toLowerCase();
+  const same = voices.filter((v) => v.lang && v.lang.toLowerCase().replace('_', '-').startsWith(prefix) && !NOVELTY.test(v.name || ''));
+  if (!same.length) return null;
+  const score = (v) =>
+    (/natural|neural|premium|enhanced|siri|studio/i.test(v.name) ? 6 : 0) +
+    (/google/i.test(v.name) ? 3 : 0) +
+    (/compact|espeak/i.test(v.name) ? -3 : 0) +
+    (v.localService === false ? 1 : 0) +
+    (v.lang.toLowerCase().replace('_', '-') === lang.toLowerCase() ? 1 : 0);
+  return same.reduce((best, v) => (score(v) > score(best) ? v : best));
+}
+
+// Text as it should be spoken: no markup, symbols or list marks read aloud, no stray blank space.
+export const spokenText = (text) =>
+  String(text || '')
+    .replace(/[*_`#>]+/g, '')
+    .replace(/\s*[→←↔]\s*/g, ', ')
+    .replace(/\s*[–—]\s*/g, ', ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
 export function createSpeech() {
   const Recognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
   const synth = globalThis.speechSynthesis;
@@ -23,6 +50,7 @@ export function createSpeech() {
   let speakToken = 0;
   let finishSpeaking = null;
   let finishListening = null;
+  let neural = null; // optional { speak(text, lang), stop() }: a neural cloud voice, used while it works
 
   function voicesReady() {
     return new Promise((resolve) => {
@@ -33,15 +61,6 @@ export function createSpeech() {
     });
   }
 
-  function pickVoice(voices, lang) {
-    const prefix = lang.split('-')[0].toLowerCase();
-    const same = voices.filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith(prefix));
-    if (!same.length) return null;
-    // Prefer the most natural-sounding voice available, then the exact regional match.
-    const score = (v) =>
-      (/natural|neural|premium|enhanced|siri/i.test(v.name) ? 4 : 0) + (/google/i.test(v.name) ? 2 : 0) + (v.lang.toLowerCase() === lang.toLowerCase() ? 1 : 0);
-    return same.reduce((best, v) => (score(v) > score(best) ? v : best));
-  }
 
   // Long utterances get cut off in Chrome, so speak sentence by sentence.
   function sentences(text) {
@@ -49,7 +68,21 @@ export function createSpeech() {
   }
 
   async function speak(text, lang) {
-    if (!synth || !text) return;
+    text = spokenText(text);
+    if (!text) return;
+    if (neural) {
+      stopSpeaking();
+      const token = ++speakToken;
+      try {
+        await neural.speak(text, lang, () => token !== speakToken);
+        return;
+      } catch (e) {
+        if (token !== speakToken) return; // interrupted, not failed
+        console.warn('Fluent: neural voice failed, using the browser voice', e?.message || e);
+        neural = null; // fall back for the rest of the session
+      }
+    }
+    if (!synth) return;
     stopSpeaking();
     const token = ++speakToken;
     const voice = pickVoice(await voicesReady(), lang);
@@ -66,7 +99,7 @@ export function createSpeech() {
         const u = new SpeechSynthesisUtterance(part);
         u.lang = lang;
         if (voice) u.voice = voice;
-        u.rate = 1;
+        u.rate = 0.97; // a touch slower than the default sounds less hurried
         u.onend = u.onerror = finish;
         // Chrome sometimes never fires onend; don't let the conversation hang on it.
         timer = setTimeout(finish, 4000 + part.length * 150);
@@ -77,6 +110,7 @@ export function createSpeech() {
 
   function stopSpeaking() {
     speakToken++;
+    neural?.stop();
     finishSpeaking?.();
     synth?.cancel();
   }
@@ -127,5 +161,5 @@ export function createSpeech() {
     active?.abort();
   }
 
-  return { supported: !!Recognition, speak, stopSpeaking, listen, stopListening };
+  return { supported: !!Recognition, speak, stopSpeaking, listen, stopListening, setNeural: (n) => (neural = n || null), get neural() { return !!neural; } };
 }

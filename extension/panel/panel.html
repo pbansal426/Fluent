@@ -10,6 +10,9 @@
 <header>
   <div class="brand">Fluent</div>
   <select id="lang" aria-label="Your language"></select>
+  <button id="report-btn" class="icon" aria-label="Report a problem" title="Report a problem: type what went wrong in the box first if you like" hidden>
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>
+  </button>
   <button id="settings-btn" class="icon" aria-label="Settings" title="Settings">
     <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2.5"/><circle cx="9" cy="12" r="2.5"/><circle cx="17" cy="18" r="2.5"/></svg>
   </button>
@@ -53,6 +56,7 @@
         <button id="continue" class="primary"></button>
         <button id="translate" hidden></button>
         <button id="skip"></button>
+        <button id="repeat-card"></button>
       </div>
     </div>
   </section>
@@ -67,6 +71,9 @@
       <svg class="ico ico-wave" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 6.5v11M12 3.5v17M16 7.5v9M20 10v4"/></svg>
     </button>
     <input id="text" type="text" autocomplete="off" dir="auto">
+    <button id="repeat" type="button" class="icon" aria-label="Repeat" title="Repeat">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v5h-5"/></svg>
+    </button>
     <button id="reveal" type="button" class="icon" aria-label="Show or hide what I type" title="Show or hide" hidden>
       <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
     </button>

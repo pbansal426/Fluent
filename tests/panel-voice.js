@@ -39,6 +39,17 @@
   mic.click();
   await sim.sleep(100);
   checks['unmuting clears muted state'] = !mic.classList.contains('muted');
+
+  // Typing and talking never both answer: the microphone waits while a draft is in the box.
+  const box = p().getElementById('text');
+  box.value = 'my phone is';
+  box.dispatchEvent(new Event('input', { bubbles: true }));
+  await sim.sleep(100);
+  checks['typing pauses the microphone'] = /typing/i.test(p().getElementById('live-status').textContent);
+  box.value = '';
+  box.dispatchEvent(new Event('input', { bubbles: true }));
+  await sim.sleep(100);
+  checks['emptying the box brings the microphone back'] = !/typing/i.test(p().getElementById('live-status').textContent);
   delete window.SIM_BOOT;
   return JSON.stringify({ checks, summary: `${Object.values(checks).filter(Boolean).length}/${Object.keys(checks).length} passed` });
 })();

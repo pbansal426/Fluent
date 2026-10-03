@@ -6,9 +6,10 @@ import { LANGUAGES, createSpeech } from '../lib/speech.js';
 import { createLive } from '../lib/live.js';
 import { detectProvider, pickModel } from '../lib/providers.js';
 import { createLog } from '../lib/log.js';
+import { createNeuralTts } from '../lib/neural-tts.js';
 
 // Shown at the bottom of the panel, so it is obvious which copy of the extension is running.
-const BUILD = '2026-10-03.6';
+const BUILD = '2026-10-03.8';
 const log = createLog();
 
 const DEFAULTS = {
@@ -44,6 +45,8 @@ const state = {
   listenToken: 0,
   session: 0,
   muted: false, // the user paused the microphone for now
+  typing: false, // a draft is in the text box: the microphone waits so voice and text never both answer
+  typingTimer: null,
   live: null, // the open microphone stream of live mode
   speakStart: 0,
   falseBarges: 0,
@@ -67,6 +70,14 @@ async function loadSettings() {
   $('lang').value = state.settings.lang;
 }
 
+// With an OpenAI key the assistant uses OpenAI's natural voice; otherwise the best voice the browser has.
+function applyVoice() {
+  const s = state.settings;
+  const openai = s.apiKey && detectProvider(s.apiKey)?.id === 'openai' && /api\.openai\.com/.test(s.baseUrl);
+  speech.setNeural(openai ? createNeuralTts({ apiKey: s.apiKey, baseUrl: s.baseUrl }) : null);
+  log('voice', { neural: !!openai });
+}
+
 async function saveSettings() {
   Object.assign(state.settings, {
     baseUrl: $('base-url').value.trim() || DEFAULTS.baseUrl,
@@ -78,6 +89,7 @@ async function saveSettings() {
     lang: $('lang').value,
   });
   await chrome.storage.local.set({ settings: state.settings });
+  applyVoice();
 }
 
 function client() {
@@ -152,6 +164,7 @@ function render() {
     $('type-text').textContent = `${state.field.label.replace(/[\s*:]+$/, '')} — ${state.field.sensitive ? p.type_private : p.type_long}`;
     $('continue').textContent = p.btn_continue;
     $('skip').textContent = p.btn_skip;
+    $('repeat-card').textContent = p.btn_repeat;
     $('translate').textContent = p.btn_translate;
     $('translate').hidden = !state.canTranslate;
   }
@@ -175,12 +188,14 @@ function render() {
   if (!speech.supported) status = ['', 'idle'];
   else if (live && state.muted) status = [p.status_muted, 'muted'];
   else if (privateField) status = [p.status_private, 'type'];
+  else if (state.typing) status = [p.status_typing, 'type'];
   else if (state.speaking) status = [p.status_speaking, 'speaking'];
   else if (state.listening) status = [p.listening, 'listening'];
   else if (state.busy) status = [p.status_thinking, 'thinking'];
   $('live-status').textContent = status[0];
   $('live-status').dataset.state = status[1];
-  for (const id of ['continue', 'skip', 'translate']) $(id).disabled = state.busy;
+  $('repeat').title = $('repeat').ariaLabel = p.btn_repeat;
+  $('report-btn').hidden = !state.agent;
 }
 
 // ---------- page bridge ----------
@@ -296,10 +311,11 @@ async function runTurn(fn) {
     render();
   }
   if (state.queue.length) {
-    const text = state.queue.shift();
+    const item = state.queue.shift();
+    if (typeof item === 'function') return runTurn(item);
     return runTurn(() => state.mode === 'type' && state.field?.sensitive
       ? ui.say(state.phrases.type_private)
-      : state.agent.handleUser(text));
+      : state.agent.handleUser(item));
   }
   if (state.pendingRescan) {
     state.pendingRescan = false;
@@ -318,7 +334,7 @@ function phrasesFor(llm) {
     phraseJobs.set(
       code,
       (async () => {
-        const key = `phrases:v10:${code}`; // bump when PHRASES changes
+        const key = `phrases:v17:${code}`; // bump when PHRASES changes
         const cached = (await chrome.storage.local.get(key))[key];
         if (cached && Object.keys(PHRASES).every((k) => cached[k])) return cached;
         const phrases = await translatePhrases(llm, name);
@@ -476,7 +492,7 @@ const MAX_SILENT_ROUNDS = 6; // how many times to keep listening through silence
 
 // byUser: the user tapped the mic (so it is fine to open the permission tab); otherwise hands-free.
 async function listenOnce(byUser = false) {
-  if (state.listening || state.busy || state.away || state.mode !== 'listen') return;
+  if (state.listening || state.busy || state.away || state.typing || state.mode !== 'listen') return;
   const token = ++state.listenToken;
   const problem = await micProblem();
   if (token !== state.listenToken) return;
@@ -509,6 +525,7 @@ async function listenOnce(byUser = false) {
   if (token !== state.listenToken) return;
   state.listening = false;
   $('interim').hidden = true;
+  if (text && state.typing) text = ''; // the user started typing meanwhile: the typed answer wins
   if (text) {
     state.silentRounds = 0;
     render();
@@ -553,7 +570,7 @@ function closeLive() {
 
 // The user started talking while the assistant was speaking: stop it and listen, right away.
 function talkOver() {
-  if (!state.speaking || state.muted) return;
+  if (!state.speaking || state.muted || state.typing) return;
   // Speaker echo can look like talking. Interrupting within a moment of starting to speak twice in a row is
   // probably echo, so be less eager from then on.
   state.falseBarges = performance.now() - state.speakStart < 900 ? state.falseBarges + 1 : 0;
@@ -644,6 +661,7 @@ $('use-local').addEventListener('click', async () => {
   $('model').value = DEFAULTS.model;
   $('api-key').value = '';
   await chrome.storage.local.set({ settings: state.settings });
+  applyVoice();
   await refreshModels();
 });
 $('start').addEventListener('click', start);
@@ -651,15 +669,71 @@ $('send-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const text = $('text').value;
   if (sendText(text)) $('text').value = '';
+  endTyping();
+});
+
+// One answer at a time: while the user types, the microphone waits (and the assistant stops talking).
+// Enter sends and the microphone comes back; so does emptying the box, or a few seconds without typing.
+function resumeListening() {
+  if (state.voiceOn && !state.muted && state.mode === 'listen' && !state.busy && !state.away && !state.speaking) listenOnce();
+}
+function endTyping() {
+  clearTimeout(state.typingTimer);
+  if (!state.typing) return;
+  state.typing = false;
+  log('typing', { ended: true });
+  render();
+  resumeListening();
+}
+$('text').addEventListener('input', () => {
+  clearTimeout(state.typingTimer);
+  if (!$('text').value) return endTyping();
+  if (!state.typing) {
+    state.typing = true;
+    log('typing', { started: true });
+    if (state.busy) state.skipSpeech = true;
+    speech.stopSpeaking();
+    cancelListening();
+    state.live?.arm(false);
+    render();
+  }
+  state.typingTimer = setTimeout(endTyping, 6000);
 });
 $('mic').addEventListener('click', toggleMic);
+// One click sends the whole conversation and the state of the form to the development log (no screenshots needed).
+$('report-btn').addEventListener('click', () => {
+  const transcript = [...document.querySelectorAll('#transcript .bubble')].map((b) => `${b.className.replace('bubble ', '')}: ${b.textContent}`);
+  log('report', {
+    note: state.mode === 'type' && state.field?.sensitive ? '' : $('text').value,
+    mode: state.mode,
+    field: state.field?.label,
+    muted: state.muted,
+    away: state.away,
+    transcript,
+  });
+  banner('Thank you. The conversation was saved for the developer.', 'info');
+  setTimeout(() => banner(''), 4000);
+});
 $('reveal').addEventListener('click', () => {
   state.reveal = !state.reveal;
   render();
 });
-$('continue').addEventListener('click', () => runTurn(() => state.agent.continueTyped()));
-$('skip').addEventListener('click', () => runTurn(() => state.agent.skipCurrent()));
-$('translate').addEventListener('click', () => runTurn(() => state.agent.translateTyped()));
+// A button press cuts the assistant short and then does its job; it never waits for the assistant to finish.
+function act(fn) {
+  log('button', { while: state.busy ? 'busy' : 'idle' });
+  speech.stopSpeaking();
+  if (state.busy) {
+    state.skipSpeech = true;
+    state.queue.push(fn);
+    return;
+  }
+  runTurn(fn);
+}
+$('continue').addEventListener('click', () => act(() => state.agent.continueTyped()));
+$('skip').addEventListener('click', () => act(() => state.agent.skipCurrent()));
+$('translate').addEventListener('click', () => act(() => state.agent.translateTyped()));
+$('repeat').addEventListener('click', () => act(() => state.agent.repeat()));
+$('repeat-card').addEventListener('click', () => act(() => state.agent.repeat()));
 $('show-tr').addEventListener('change', (e) => {
   state.send?.({ type: 'fluent:visible', show: e.target.checked }).catch(() => {});
 });
@@ -714,6 +788,7 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
 });
 
 await loadSettings();
+applyVoice();
 $('build').textContent = `Fluent build ${BUILD}`;
 render();
 phrasesFor(client());

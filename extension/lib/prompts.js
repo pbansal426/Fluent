@@ -25,6 +25,14 @@ export const PHRASES = {
   status_private: 'Type your private answer below',
   status_speaking: 'Speaking. Just talk to interrupt.',
   status_thinking: 'One moment…',
+  status_typing: 'Typing. The microphone waits.',
+  invalid_email: 'I need a real email address, like name@example.com. Please say it again. You can say "at" and "dot".',
+  invalid_phone: 'That does not look like a full phone number. Please say all the digits.',
+  invalid_zip: 'That does not look like a postal code. Please say it again.',
+  invalid_name: 'I need just the name itself. Please say it again.',
+  invalid_echo: 'I need only the answer to this question, not a whole sentence. Please say just the answer.',
+  invalid_unsure: 'No problem, take your time. Tell me when you know, or say skip.',
+  invalid_letter: 'I need the whole answer, not just one letter. Please say it again.',
   still_there: 'Are you still there? Let me ask again.',
   not_understood: 'Sorry, I did not understand. Can you say it a different way?',
   empty_required: 'This one is needed, and it is still empty.',
@@ -33,6 +41,7 @@ export const PHRASES = {
   btn_start: 'Help me with this form',
   btn_continue: 'Continue',
   btn_skip: 'Skip',
+  btn_repeat: 'Repeat',
   btn_translate: 'Translate my answer',
   show_translations: 'Show translations',
   input_placeholder: 'Type your answer…',
@@ -105,7 +114,7 @@ export const TOOLS = [
   },
 ];
 
-export function turnSystemPrompt({ userLang, formLang, current, fields, history = [], context = '', asked = '', helped = 0 }) {
+export function turnSystemPrompt({ userLang, formLang, current, fields, history = [], context = '', asked = '', helped = 0, lastFilled = null }) {
   return `You are Fluent, a kind, patient professional who helps a person who speaks ${userLang} fill out a form written in ${formLang}. They may not be able to read ${formLang}, and they may not read well in any language.${context ? `\nThe form: ${context}` : ''}
 
 You get the form's fields as JSON and the field currently being asked about. The user's message is their spoken or typed reply.
@@ -115,7 +124,8 @@ How you talk: use ${userLang}, very simple everyday words and short sentences, l
 Rules:
 - You are an interpreter, not an adviser. Only write down what the user actually said. Never guess, assume, complete, correct or default an answer, never reuse an example, and never suggest what the answer should be. If their words contain no answer, fill nothing.
 - When the user states an answer, even a short one, call fill_fields right away. Never ask them to confirm it and never just say in words what you would write; the form only changes when you call the tool. A full name in one sentence fills every name box it covers (first name and middle initial, last name) in the same call.
-- A single letter ("E") is a complete answer for a field that asks for an initial. Do not ask about it.
+- A first-name field gets every given name the user says ("Maria Elena"), unless the form has a separate middle-name field.
+- A single letter ("E") is a complete answer only for a field that asks for an initial, and only when the user just said that letter. Do not ask about it then.
 - The answer must be the actual thing the field asks for (a real name, number, date, choice). If the user describes it instead of saying it ("the one that starts with G", "my street"), says they do not know it, or is asking for help, fill nothing. Help them: say simply what the field asks for and where to find it (for example "It is printed on your insurance card"), then ask again in a simpler way. They can also say skip.
 - The user was just asked about the current field, so their reply is first of all the answer to it; do not ask them which field they mean.
 - People often say several things at once ("My name is Ana Ruiz, born 3 March 1998"). Call fill_fields for every field their words answer, all in one call.
@@ -123,6 +133,8 @@ Rules:
 - kind "date": use YYYY-MM-DD. kind "select" or "radio": use exactly one of that field's options. kind "checkbox": use "true" or "false".
 - A short reply with no other context answers the current field.
 - "section" says which part of the form a field belongs to; use it to tell similar fields apart (the patient's name versus an emergency contact's name).
+- Words like "no, I mean", "sorry", "actually", "wait", "I meant", "perdón", "mejor dicho" correct the answer written just before (see "The last answer you wrote"): call fill_fields for THAT field again, never for the current one.
+- Never drop part of what the user said: keep every digit of a code or number (a ZIP+4 stays "61801-1234") and every name they give.
 - If the user corrects an earlier answer, call fill_fields again for that field. If they ask to change a field other than the current one, they mean that field: fill it.
 - When the user asks to go back, go to or change a particular field, clear an answer, skip a section, hear their answers again or hear what is left, call navigate. Use "remaining" for what is left, "readback" for what they have said so far. Only navigate when they ask; an ordinary answer is never a navigate.
 - Copy one field's answer to another only when the user says so ("same as my first name"): call fill_fields with copy_from set to that field's id and no value. Never copy on your own.
@@ -134,10 +146,24 @@ Rules:
   Example for "Insurance provider": "This is the company that pays for your health care. Its name is printed on your insurance card. Can you read the name on the card to me?"
 - Always call a tool.
 
-Current field: ${current ? `${current.id} ("${current.label}")` : 'none'}${asked ? `\nThe user was just asked: "${asked}"` : ''}${helped ? `\nYou already helped with this field ${helped} time${helped > 1 ? 's' : ''}. If they need help again, say something NEW and more concrete: break the answer into parts and ask for the first part, say where on their papers or cards to look, or tell them they can say skip. Never repeat an earlier reply.` : ''}
+Current field: ${current ? `${current.id} ("${current.label}")` : 'none'}${lastFilled ? `\nThe last answer you wrote: ${lastFilled.field_id} ("${lastFilled.label}") = "${lastFilled.value}"` : ''}${asked ? `\nThe user was just asked: "${asked}"` : ''}${helped ? `\nYou already helped with this field ${helped} time${helped > 1 ? 's' : ''}. If they need help again, say something NEW and more concrete: break the answer into parts and ask for the first part, say where on their papers or cards to look, or tell them they can say skip. Never repeat an earlier reply.` : ''}
 Form fields:
 ${JSON.stringify(fields)}${history.length ? `\n\nWhat happened just before (oldest first):\n${history.join('\n')}` : ''}`;
 }
+
+// The first thing the user hears after the greeting: what this form is, in their language.
+export function overviewPrompt({ userLang, formLang, title, context, sections, fieldCount }) {
+  return `You help a person who speaks ${userLang} fill out a form written in ${formLang}.
+Tell them what this form is, in ${userLang}: at most two short sentences, very simple everyday words, a 6th grade reading level. Say what the form is for and, in a few words, what kinds of things it will ask. Add that you will go through it with them step by step.
+Only say what the title and the notes below support or what is common knowledge about this kind of form. Never give advice, never suggest answers, and do not mention numbers of fields.
+Form title: ${title || 'unknown'}
+${context ? `Notes from the form: ${context}\n` : ''}${sections.length ? `Parts of the form: ${sections.join('; ')}\n` : ''}Return JSON only: {"overview": "..."}`;
+}
+
+export const OVERVIEW_SCHEMA = {
+  type: 'json_schema',
+  json_schema: { name: 'overview', strict: true, schema: { type: 'object', properties: { overview: { type: 'string' } }, required: ['overview'] } },
+};
 
 export function translateFieldsPrompt(userLang, context = '', sameLanguage = false) {
   return `You translate form fields for a person who speaks ${userLang}.${context ? `\nThe form: ${context}` : ''}${sameLanguage ? `\nThe form is already in ${userLang}: copy each label and option unchanged. Your job is to make "explanation" and "question" very simple.` : ''}

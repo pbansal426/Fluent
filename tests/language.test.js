@@ -32,7 +32,7 @@ test('same language gets simple questions but no translation badges', async () =
   const said = [];
   const agent = new Agent({
     userLang: 'English',
-    llm: { chatJson: async ({ messages }) => { calls++; assert.match(messages[0].content, /already in English/); return { form_language: 'English', fields: [{ id: 'f1', label: 'Simplified label', explanation: 'Your first name.', question: 'What is your first name?', options: [], section: '', english: 'First name' }] }; } },
+    llm: { chatJson: async ({ messages }) => { if (/what this form is/.test(messages[0].content)) return { overview: 'This is a short form about you.' }; calls++; assert.match(messages[0].content, /already in English/); return { form_language: 'English', fields: [{ id: 'f1', label: 'Simplified label', explanation: 'Your first name.', question: 'What is your first name?', options: [], section: '', english: 'First name' }] }; } },
     page: { scan: async () => ({ pageLang: 'en-US', fields: [{ id: 'f1', kind: 'text', label: 'First name', options: [] }] }), apply: async () => { applies++; }, highlight: async () => {} },
     ui: { language: (...args) => { shown = args; }, status() {}, prompt() {}, say: async (t) => void said.push(t) },
   });
@@ -43,5 +43,40 @@ test('same language gets simple questions but no translation badges', async () =
   assert.equal(calls, 1);
   assert.equal(agent.tr(agent.fields[0]).label, 'First name'); // the form's own label is kept
   assert.match(said.at(-1), /^What is your first name\?/);
+  assert.equal(agent.mode, 'listen');
+});
+
+test('the first messages are the greeting, then a plain-language overview of the form, then the first question', async () => {
+  const said = [];
+  let prompt = '';
+  const agent = new Agent({
+    userLang: 'Spanish',
+    llm: {
+      chatJson: async ({ messages }) => {
+        if (/what this form is/.test(messages[0].content)) { prompt = messages[0].content; return { overview: 'Este formulario sirve para pedir la residencia. Lo haremos paso a paso.' }; }
+        return { form_language: 'English', fields: [{ id: 'f1', label: 'Apellido', explanation: 'Su apellido.', question: '¿Cuál es su apellido?', options: [], section: '', english: 'Family name' }] };
+      },
+    },
+    page: { scan: async () => ({ pageLang: 'en-US', title: 'Form I-485, Application to Register Permanent Residence', fields: [{ id: 'f1', kind: 'text', label: 'Family name', options: [] }] }), apply: async () => {}, highlight: async () => {} },
+    ui: { language() {}, status() {}, prompt() {}, say: async (t) => void said.push(t) },
+  });
+  await agent.start();
+  assert.equal(said[0], agent.phrases.greeting);
+  assert.match(said[1], /^Este formulario sirve para pedir la residencia/);
+  assert.match(said[2], /Apellido|apellido/);
+  assert.match(prompt, /Form I-485, Application to Register Permanent Residence/);
+  assert.match(prompt, /Spanish/);
+});
+
+test('a failing overview never blocks the first question', async () => {
+  const said = [];
+  const agent = new Agent({
+    userLang: 'Spanish',
+    llm: { chatJson: async ({ messages }) => { if (/what this form is/.test(messages[0].content)) throw new Error('model down'); return { form_language: 'English', fields: [] }; } },
+    page: { scan: async () => ({ pageLang: 'en-US', fields: [{ id: 'f1', kind: 'text', label: 'Family name', options: [] }] }), apply: async () => {}, highlight: async () => {} },
+    ui: { language() {}, status() {}, prompt() {}, say: async (t) => void said.push(t) },
+  });
+  await agent.start();
+  assert.equal(said.length, 2); // greeting and the first question
   assert.equal(agent.mode, 'listen');
 });
