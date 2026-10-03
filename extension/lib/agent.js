@@ -465,7 +465,7 @@ export class Agent {
           done.push({ id: field.id, label: this.tr(field).label, original: field.label, value: r.value });
           this.log('fill', { field: field.label, value: r.value });
           this.lastFill = { field_id: field.id, label: field.label, value: r.value };
-          if (field.members && /^(no|none|n\/a|not applicable)$/i.test(r.value)) this.skipDependents(field);
+          if ((field.members || field.kind === 'radio') && /^(no|none|n\/a|not applicable)$/i.test(r.value)) this.skipDependents(field);
           progressed = true;
         }
       } else if (call.name === 'skip_field') {
@@ -583,8 +583,14 @@ export class Agent {
 
   // A plain "yes" / "no" (or "I am", "never", "sí") to a Yes / No question needs no interpreting.
   quickChoice(field, said) {
-    if (!field?.members || !/^yes$/i.test(field.options?.[0] || '') || !/^no$/i.test(field.options?.[1] || '')) return null;
-    return plainYesNo(said);
+    // Any two-option Yes / No question: a group of checkboxes or radio buttons, in English or Spanish (Sí / No).
+    if (!field || field.options?.length !== 2 || !['radio'].includes(field.kind)) return null;
+    const plain = (s) => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const yes = field.options.findIndex((o) => ['yes', 'si'].includes(plain(o)));
+    const no = field.options.findIndex((o) => plain(o) === 'no');
+    if (yes < 0 || no < 0) return null;
+    const answer = plainYesNo(said);
+    return answer ? field.options[answer === 'Yes' ? yes : no] : null;
   }
 
   // Writes a value into a field. A choice drawn as several checkboxes (Yes / No) ticks the chosen one only.
@@ -671,7 +677,7 @@ export class Agent {
 
   // After "No" to a Yes / No question, the "If you answered Yes, ..." fields that follow do not apply.
   skipDependents(field) {
-    const DEPENDENT = /\bif\s+(you\s+)?(answered|selected|checked|chose|said)\b|\bif\s+["“]?yes\b|\bif\s+(so|applicable)\b/i;
+    const DEPENDENT = /\bif\s+(you\s+)?(answered|selected|checked|chose|said)\b|\bif\s+["“]?yes\b|\bif\s+(so|applicable)\b|\bsi\s+(usted\s+)?(respondi[oó]|contest[oó]|marc[oó]|seleccion[oó]|dijo)\b|\bsi\s+(la\s+respuesta\s+es\s+)?["«“]?s[ií]\b/i;
     for (let i = this.fields.indexOf(field) + 1; i < this.fields.length && DEPENDENT.test(this.fields[i].label); i++) {
       this.skipped.add(this.fields[i].id);
       this.log('skip-dependent', { field: this.fields[i].label });

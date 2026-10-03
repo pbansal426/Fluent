@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Registro de nuevo paciente — Clínica Familiar Lakeside</title>
+<style>
+  :root { --ink:#1d2733; --muted:#5b6978; --line:#cfd8e3; --brand:#1f5f8b; --bg:#f3f6f9; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 Georgia, "Times New Roman", serif; color:var(--ink); background:var(--bg); }
+  header { background:var(--brand); color:#fff; padding:18px 24px; }
+  header .name { font-size:22px; font-weight:bold; letter-spacing:.3px; }
+  header .addr { font:13px/1.4 Arial, sans-serif; opacity:.9; }
+  main { max-width:860px; margin:24px auto 60px; background:#fff; border:1px solid var(--line); padding:28px 34px 34px; }
+  h1 { font-size:24px; margin:0 0 6px; }
+  .intro { color:var(--muted); font:14px/1.5 Arial, sans-serif; margin:0 0 20px; }
+  fieldset { border:1px solid var(--line); margin:0 0 22px; padding:16px 18px 6px; }
+  legend { font:bold 13px Arial, sans-serif; text-transform:uppercase; letter-spacing:1px; color:var(--brand); padding:0 8px; }
+  .row { display:grid; grid-template-columns:repeat(6, 1fr); gap:14px 16px; margin-bottom:14px; }
+  .c2 { grid-column:span 2; } .c3 { grid-column:span 3; } .c4 { grid-column:span 4; } .c6 { grid-column:span 6; }
+  label { display:block; font:bold 12.5px Arial, sans-serif; margin-bottom:4px; }
+  label .req { color:#b3261e; }
+  input[type=text], input[type=date], input[type=tel], input[type=email], select, textarea {
+    width:100%; padding:8px 9px; border:1px solid #9fb0c2; border-radius:3px; font:15px Arial, sans-serif; background:#fff; }
+  textarea { min-height:96px; resize:vertical; }
+  .hint { font:12px Arial, sans-serif; color:var(--muted); margin:3px 0 0; }
+  .q { margin-bottom:14px; }
+  .q > .caption { font:bold 12.5px Arial, sans-serif; margin-bottom:4px; }
+  .choice { display:inline-flex; align-items:center; gap:6px; margin-right:18px; font:14px Arial, sans-serif; font-weight:normal; }
+  .consent { display:flex; gap:10px; align-items:flex-start; font:14px/1.45 Arial, sans-serif; font-weight:normal; }
+  .consent input { margin-top:3px; }
+  button { background:var(--brand); color:#fff; border:0; padding:11px 26px; font:bold 15px Arial, sans-serif; border-radius:3px; cursor:pointer; }
+  #done { display:none; margin-top:20px; padding:16px; background:#e9f6ec; border:1px solid #9ccfa7; font:14px Arial, sans-serif; }
+  @media (max-width:700px) { .row { grid-template-columns:1fr; } .c2,.c3,.c4,.c6 { grid-column:span 1; } main { padding:18px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="name">Clínica Familiar Lakeside</div>
+  <div class="addr">Calle Harbor Oeste 1420, Champaign, IL 61820 · (217) 555-0142</div>
+</header>
+<main>
+  <h1>Registro de nuevo paciente</h1>
+  <p class="intro">Por favor complete todas las secciones antes de su primera cita. Los campos marcados con un asterisco son obligatorios. Toda la información es confidencial.</p>
+
+  <form id="intake" novalidate>
+    <fieldset>
+      <legend>Información del paciente</legend>
+      <div class="row">
+        <div class="c2"><label for="first">Nombre legal <span class="req">*</span></label><input type="text" id="first" name="first_name" autocomplete="given-name" required></div>
+        <div class="c2"><label for="last">Apellido legal <span class="req">*</span></label><input type="text" id="last" name="last_name" autocomplete="family-name" required></div>
+        <div class="c2"><label for="dob">Fecha de nacimiento <span class="req">*</span></label><input type="date" id="dob" name="dob" required></div>
+      </div>
+      <div class="row">
+        <div class="c2"><label for="sex">Sexo asignado al nacer</label>
+          <select id="sex" name="sex"><option value="">Seleccione…</option><option>Femenino</option><option>Masculino</option><option>Intersexual</option><option>Prefiero no decirlo</option></select></div>
+        <div class="c2"><label for="marital">Estado civil</label>
+          <select id="marital" name="marital_status"><option value="">Seleccione…</option><option>Soltero(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viudo(a)</option></select></div>
+        <div class="c2"><label for="ssn">Número de Seguro Social</label><input type="text" id="ssn" name="ssn" placeholder="###-##-####" autocomplete="off" maxlength="11" aria-describedby="ssn-hint">
+          <p class="hint" id="ssn-hint">Solo se usa para la facturación. Déjelo en blanco si no tiene uno.</p></div>
+      </div>
+      <div class="row">
+        <div class="c3"><label for="phone">Teléfono celular <span class="req">*</span></label><input type="tel" id="phone" name="phone" autocomplete="tel" required></div>
+        <div class="c3"><label for="email">Correo electrónico</label><input type="email" id="email" name="email" autocomplete="email"></div>
+      </div>
+      <div class="row">
+        <div class="c4"><label for="street">Dirección (calle y número)</label><input type="text" id="street" name="street" autocomplete="street-address"></div>
+        <div class="c2"><label for="city">Ciudad</label><input type="text" id="city" name="city" autocomplete="address-level2"></div>
+      </div>
+      <div class="row">
+        <div class="c2"><label for="occupation">Ocupación</label><input type="text" id="occupation" name="occupation"></div>
+        <div class="c2"><label for="language">Idioma preferido</label><input type="text" id="language" name="preferred_language"></div>
+        <div class="c2"><label for="interp">¿Necesita intérprete?</label>
+          <select id="interp" name="interpreter"><option value="">Seleccione…</option><option>Sí</option><option>No</option></select></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Seguro médico</legend>
+      <div class="row">
+        <div class="c3"><label for="insurer">Compañía de seguros</label><input type="text" id="insurer" name="insurance_provider"></div>
+        <div class="c3"><label for="member">Número de identificación de miembro</label><input type="text" id="member" name="member_id" autocomplete="off"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Contacto de emergencia</legend>
+      <div class="row">
+        <div class="c2"><label for="ec-name">Nombre completo <span class="req">*</span></label><input type="text" id="ec-name" name="emergency_name" required></div>
+        <div class="c2"><label for="ec-rel">Relación con el paciente</label><input type="text" id="ec-rel" name="emergency_relationship"></div>
+        <div class="c2"><label for="ec-phone">Número de teléfono <span class="req">*</span></label><input type="tel" id="ec-phone" name="emergency_phone" required></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Historial médico</legend>
+      <div class="q">
+        <div class="caption">¿Tiene alguna alergia a medicamentos?</div>
+        <label class="choice"><input type="radio" name="allergies" value="yes"> Sí</label>
+        <label class="choice"><input type="radio" name="allergies" value="no"> No</label>
+        <label class="choice"><input type="radio" name="allergies" value="unsure"> No estoy seguro(a)</label>
+      </div>
+      <div class="row">
+        <div class="c6"><label for="allergy-list">Si respondió que sí, escriba los medicamentos a los que es alérgico(a)</label><input type="text" id="allergy-list" name="allergy_list"></div>
+      </div>
+      <div class="q">
+        <div class="caption">¿Fuma actualmente o usa productos de tabaco?</div>
+        <label class="choice"><input type="radio" name="tobacco" value="never"> Nunca</label>
+        <label class="choice"><input type="radio" name="tobacco" value="former"> Exfumador(a)</label>
+        <label class="choice"><input type="radio" name="tobacco" value="current"> Fumador(a) actual</label>
+      </div>
+      <div class="row">
+        <div class="c6"><label for="meds">Medicamentos actuales</label><input type="text" id="meds" name="medications">
+          <p class="hint">Incluya recetas, vitaminas y suplementos.</p></div>
+      </div>
+      <div class="row">
+        <div class="c6"><label for="reason">Motivo de la visita de hoy <span class="req">*</span></label>
+          <textarea id="reason" name="reason" required></textarea>
+          <p class="hint">Describa sus síntomas y desde cuándo los tiene.</p></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Consentimiento</legend>
+      <p class="hint" style="font-size:13px;margin:0 0 12px">Al marcar la casilla de abajo usted autoriza a la Clínica Familiar Lakeside a darle tratamiento y a cobrar a su compañía de seguros en su nombre.</p>
+      <label class="consent"><input type="checkbox" id="consent" name="consent" required> He leído y estoy de acuerdo con el consentimiento para el tratamiento y el aviso de prácticas de privacidad.</label>
+    </fieldset>
+
+    <button type="submit">Enviar registro</button>
+    <div id="done">Gracias. Hemos recibido su registro.</div>
+  </form>
+</main>
+<script>
+  document.getElementById('intake').addEventListener('submit', (e) => {
+    e.preventDefault();
+    document.getElementById('done').style.display = 'block';
+  });
+</script>
+</body>
+</html>

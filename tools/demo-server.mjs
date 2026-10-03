@@ -21,13 +21,15 @@ const TYPES = {
 
 const SAMPLE_NAMES = {
   'i-485.pdf': 'Form I-485 (green card)', 'i-9.pdf': 'Form I-9', 'i-765.pdf': 'Form I-765', 'i-130.pdf': 'Form I-130',
-  'fw2.pdf': 'W-2 (English)', 'fw2_es.pdf': 'W-2 (Spanish)',
+  'fw2.pdf': 'W-2 (English)', 'fw2_es.pdf': 'W-2 (Spanish)', 'fw4sp.pdf': 'W-4 (Spanish)',
 };
 
 async function samples() {
   const out = [];
   for (const f of await readdir(root)) if (SAMPLE_NAMES[f]) out.push({ name: SAMPLE_NAMES[f], url: `/${f}` });
   out.push({ name: 'Clinic intake (web form)', url: '/demo/intake.html' });
+  out.push({ name: 'Clinic intake (Spanish)', url: '/demo/intake-es.html' });
+  out.push({ name: 'I-485 part 1 (Spanish)', url: '/demo/i485-es.html' });
   return out;
 }
 

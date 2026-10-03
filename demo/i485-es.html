@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Formulario I-485 — Solicitud para registrar la residencia permanente o ajustar el estatus (traducción de demostración)</title>
+<style>
+  :root { --ink:#1d2733; --muted:#5b6978; --line:#cfd8e3; --brand:#1c3d6e; --bg:#f3f6f9; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 Georgia, "Times New Roman", serif; color:var(--ink); background:var(--bg); }
+  header { background:var(--brand); color:#fff; padding:16px 24px; }
+  header .name { font-size:20px; font-weight:bold; }
+  header .addr { font:13px/1.4 Arial, sans-serif; opacity:.9; }
+  main { max-width:860px; margin:24px auto 60px; background:#fff; border:1px solid var(--line); padding:28px 34px 34px; }
+  h1 { font-size:22px; margin:0 0 6px; }
+  .intro { color:var(--muted); font:14px/1.5 Arial, sans-serif; margin:0 0 20px; }
+  .note { background:#fff7e0; border:1px solid #ecd58a; padding:10px 14px; font:13px/1.45 Arial, sans-serif; margin:0 0 20px; }
+  fieldset { border:1px solid var(--line); margin:0 0 22px; padding:16px 18px 6px; }
+  legend { font:bold 13px Arial, sans-serif; text-transform:uppercase; letter-spacing:1px; color:var(--brand); padding:0 8px; }
+  h3 { font:bold 14px Arial, sans-serif; margin:4px 0 10px; }
+  .row { display:grid; grid-template-columns:repeat(6, 1fr); gap:14px 16px; margin-bottom:14px; }
+  .c2 { grid-column:span 2; } .c3 { grid-column:span 3; } .c4 { grid-column:span 4; } .c6 { grid-column:span 6; }
+  label { display:block; font:bold 12.5px Arial, sans-serif; margin-bottom:4px; }
+  input[type=text], input[type=date], input[type=tel], select, textarea { width:100%; padding:8px 9px; border:1px solid #9fb0c2; border-radius:3px; font:15px Arial, sans-serif; background:#fff; }
+  .hint { font:12px Arial, sans-serif; color:var(--muted); margin:3px 0 0; }
+  .q { margin-bottom:14px; }
+  .q > .caption { font:bold 12.5px Arial, sans-serif; margin-bottom:4px; }
+  .choice { display:inline-flex; align-items:center; gap:6px; margin-right:18px; font:14px Arial, sans-serif; font-weight:normal; }
+  .consent { display:flex; gap:10px; align-items:flex-start; font:14px/1.45 Arial, sans-serif; font-weight:normal; }
+  button { background:var(--brand); color:#fff; border:0; padding:11px 26px; font:bold 15px Arial, sans-serif; border-radius:3px; cursor:pointer; }
+  #done { display:none; margin-top:20px; padding:16px; background:#e9f6ec; border:1px solid #9ccfa7; font:14px Arial, sans-serif; }
+  @media (max-width:700px) { .row { grid-template-columns:1fr; } .c2,.c3,.c4,.c6 { grid-column:span 1; } main { padding:18px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="name">Formulario I-485</div>
+  <div class="addr">Solicitud para registrar la residencia permanente o ajustar el estatus · Departamento de Seguridad Nacional, Servicios de Ciudadanía e Inmigración de EE. UU.</div>
+</header>
+<main>
+  <h1>Solicitud para registrar la residencia permanente o ajustar el estatus</h1>
+  <p class="note">Traducción de demostración de la primera parte del Formulario I-485, hecha para probar Fluent. No es un formulario oficial de USCIS.</p>
+  <p class="intro">Escriba con letra clara. Los campos marcados con un asterisco son obligatorios. Si necesita más espacio, use la Parte 6.</p>
+
+  <form id="f" novalidate>
+    <fieldset>
+      <legend>Parte 1. Información sobre usted (persona que solicita la residencia permanente)</legend>
+
+      <h3>1. Su nombre legal actual (no escriba un apodo)</h3>
+      <div class="row">
+        <div class="c2"><label for="fam">1. Apellido (su nombre legal actual) <span>*</span></label><input type="text" id="fam" name="family_name" autocomplete="family-name"></div>
+        <div class="c2"><label for="giv">1. Nombre de pila (su nombre legal actual) <span>*</span></label><input type="text" id="giv" name="given_name" autocomplete="given-name"></div>
+        <div class="c2"><label for="mid">1. Segundo nombre (su nombre legal actual)</label><input type="text" id="mid" name="middle_name"></div>
+      </div>
+
+      <h3>2. Otros nombres que ha usado desde su nacimiento (si corresponde)</h3>
+      <p class="hint" style="margin:-4px 0 10px">Escriba todos los otros nombres que ha usado, incluido su apellido de nacimiento, otros nombres legales, apodos y alias.</p>
+      <div class="row">
+        <div class="c2"><label for="ofam">2. Apellido (otro nombre que ha usado)</label><input type="text" id="ofam" name="other_family_name"></div>
+        <div class="c2"><label for="ogiv">2. Nombre de pila (otro nombre que ha usado)</label><input type="text" id="ogiv" name="other_given_name"></div>
+        <div class="c2"><label for="omid">2. Segundo nombre (otro nombre que ha usado)</label><input type="text" id="omid" name="other_middle_name"></div>
+      </div>
+
+      <div class="row">
+        <div class="c2"><label for="dob">3. Fecha de nacimiento <span>*</span></label><input type="date" id="dob" name="dob"></div>
+        <div class="c2"><label for="anum">4. Número de Registro de Extranjero (Número A), si lo tiene</label><input type="text" id="anum" name="a_number" placeholder="A-"></div>
+        <div class="c2"><label for="acct">5. Número de cuenta en línea de USCIS, si lo tiene</label><input type="text" id="acct" name="uscis_account" autocomplete="off"></div>
+      </div>
+
+      <div class="q">
+        <div class="caption">6. Sexo</div>
+        <label class="choice"><input type="radio" name="sex" value="m"> Masculino</label>
+        <label class="choice"><input type="radio" name="sex" value="f"> Femenino</label>
+      </div>
+
+      <div class="row">
+        <div class="c2"><label for="bcity">7. Ciudad o pueblo de nacimiento</label><input type="text" id="bcity" name="birth_city"></div>
+        <div class="c2"><label for="bcountry">País de nacimiento</label><input type="text" id="bcountry" name="birth_country"></div>
+        <div class="c2"><label for="ccountry">País de ciudadanía o nacionalidad</label><input type="text" id="ccountry" name="citizenship"></div>
+      </div>
+
+      <div class="row">
+        <div class="c3"><label for="ssn">8. Número de Seguro Social de EE. UU. (si tiene uno)</label><input type="text" id="ssn" name="ssn" placeholder="###-##-####" autocomplete="off" maxlength="11"></div>
+      </div>
+
+      <div class="q">
+        <div class="caption">9. ¿Ha usado alguna vez otra fecha de nacimiento?</div>
+        <label class="choice"><input type="radio" name="otherdob" value="si"> Sí</label>
+        <label class="choice"><input type="radio" name="otherdob" value="no"> No</label>
+      </div>
+      <div class="row">
+        <div class="c3"><label for="odob">Si respondió «Sí», escriba la otra fecha de nacimiento</label><input type="date" id="odob" name="other_dob"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Parte 1 (continuación). Documento de viaje y dirección</legend>
+      <div class="row">
+        <div class="c3"><label for="pass">10. Número de pasaporte o documento de viaje usado en su última llegada</label><input type="text" id="pass" name="passport_number" autocomplete="off"></div>
+        <div class="c3"><label for="pexp">Fecha de vencimiento del pasaporte</label><input type="date" id="pexp" name="passport_expiry"></div>
+      </div>
+      <div class="row">
+        <div class="c3"><label for="pcountry">País que emitió el pasaporte</label><input type="text" id="pcountry" name="passport_country"></div>
+        <div class="c3"><label for="arrival">Fecha de su última llegada a los Estados Unidos</label><input type="date" id="arrival" name="last_arrival"></div>
+      </div>
+
+      <h3>11. Su dirección actual</h3>
+      <div class="row">
+        <div class="c4"><label for="street">Calle y número <span>*</span></label><input type="text" id="street" name="street" autocomplete="street-address"></div>
+        <div class="c2"><label for="unit">Número de apartamento, suite o piso</label><input type="text" id="unit" name="unit"></div>
+      </div>
+      <div class="row">
+        <div class="c2"><label for="city">Ciudad o pueblo <span>*</span></label><input type="text" id="city" name="city" autocomplete="address-level2"></div>
+        <div class="c2"><label for="state">Estado <span>*</span></label>
+          <select id="state" name="state"><option value="">Seleccione…</option><option>California</option><option>Florida</option><option>Illinois</option><option>Nueva York</option><option>Texas</option></select></div>
+        <div class="c2"><label for="zip">Código postal <span>*</span></label><input type="text" id="zip" name="zip" autocomplete="postal-code"></div>
+      </div>
+      <div class="q">
+        <div class="caption">¿Es esta su dirección postal actual?</div>
+        <label class="choice"><input type="radio" name="mailing" value="si"> Sí</label>
+        <label class="choice"><input type="radio" name="mailing" value="no"> No</label>
+      </div>
+      <div class="row">
+        <div class="c6"><label for="mail">Si respondió «No», escriba su dirección postal actual</label><input type="text" id="mail" name="mailing_address"></div>
+      </div>
+      <div class="row">
+        <div class="c2"><label for="marital">12. Estado civil actual</label>
+          <select id="marital" name="marital"><option value="">Seleccione…</option><option>Soltero(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viudo(a)</option></select></div>
+        <div class="c2"><label for="phone">Teléfono durante el día</label><input type="tel" id="phone" name="phone" autocomplete="tel"></div>
+        <div class="c2"><label for="email">Correo electrónico</label><input type="text" id="email" name="email" autocomplete="email"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Parte 2. Empleo</legend>
+      <div class="row">
+        <div class="c3"><label for="occ">Ocupación actual</label><input type="text" id="occ" name="occupation"></div>
+        <div class="c3"><label for="emp">Nombre de su empleador</label><input type="text" id="emp" name="employer"></div>
+      </div>
+      <div class="row">
+        <div class="c6"><label for="more">Explique cualquier cosa importante que quiera que sepamos</label><textarea id="more" name="more" style="min-height:90px"></textarea></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Parte 3. Declaración</legend>
+      <label class="consent"><input type="checkbox" id="decl" name="declaration"> Declaro, bajo pena de perjurio, que la información que he escrito en este formulario es verdadera y correcta.</label>
+    </fieldset>
+
+    <button type="submit">Enviar solicitud</button>
+    <div id="done">Gracias. Hemos recibido su solicitud (formulario de demostración).</div>
+  </form>
+</main>
+<script>
+  document.getElementById('f').addEventListener('submit', (e) => { e.preventDefault(); document.getElementById('done').style.display = 'block'; });
+</script>
+</body>
+</html>

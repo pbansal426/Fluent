@@ -9,6 +9,7 @@ const SENSITIVE_PATTERNS = [
   new RegExp(`social\\s*security\\s*${NUM}`),
   /n[uú]m(?:ero)?\.?\s*de\s*seguro\s*social/,
   /passport|pasaporte/,
+  /registro de extranjero|n[uú]mero a\b|\bn[uú]m\.?\s*a\b/,
   /licencia\s*de\s*conducir/,
   /contrase[ñn]a/,
   /n[uú]m(?:ero)?\.?\s*de\s*(?:tarjeta|cuenta|identificaci[oó]n)/,
@@ -39,12 +40,18 @@ function words(s) {
     .toLowerCase();
 }
 
+// "Passport expiration date" and "Country that issued the passport" are not the passport number.
+const ID_WORDS = /passport|pasaporte|driver|licen[cs]e|licencia/;
+const NOT_THE_NUMBER = /\b(expir\w*|vencimiento|fecha|date|country|pa[ií]s|issued|issuing|emitid\w*|state|estado)\b/;
+const NUMBER_WORDS = /\b(number|num|n[uú]mero|no)\b|#/;
+
 export function classify(field) {
   const haystack = [field.label, field.name, field.htmlId, field.placeholder].map(words).join(' | ');
+  const aboutAnIdButNotItsNumber = ID_WORDS.test(haystack) && NOT_THE_NUMBER.test(words(field.label)) && !NUMBER_WORDS.test(words(field.label));
   const sensitive =
     field.inputType === 'password' ||
     SENSITIVE_AUTOCOMPLETE.test(field.autocomplete || '') ||
-    SENSITIVE_PATTERNS.some((re) => re.test(haystack));
+    (!aboutAnIdButNotItsNumber && SENSITIVE_PATTERNS.some((re) => re.test(haystack)));
   const long = field.kind === 'textarea' || (field.maxLength || 0) > LONG_MAX_LENGTH;
   return { sensitive, long };
 }

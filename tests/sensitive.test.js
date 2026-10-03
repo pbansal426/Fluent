@@ -65,3 +65,12 @@ test('long fields are typed', () => {
   assert.equal(classify(field({ label: 'Describe', maxLength: 500 })).long, true);
   assert.equal(classify(field({ label: 'ZIP', maxLength: 10 })).long, false);
 });
+
+test('Spanish identity numbers on immigration forms are private', () => {
+  for (const label of ['Número de Registro de Extranjero (Número A), si lo tiene', 'Número de pasaporte o documento de viaje', 'Número de Seguro Social de EE. UU. (si tiene uno)', 'Número de cuenta en línea de USCIS, si lo tiene']) {
+    assert.equal(classify(field({ label })).sensitive, true, label);
+  }
+  for (const label of ['Ciudad o pueblo de nacimiento', 'País de nacimiento', 'Fecha de nacimiento', 'Número de apartamento, suite o piso', 'Fecha de vencimiento del pasaporte', 'País que emitió el pasaporte', 'Passport expiration date', 'Country that issued the passport', 'Driver license state']) {
+    assert.equal(classify(field({ label })).sensitive, false, label);
+  }
+});

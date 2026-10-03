@@ -384,6 +384,18 @@ test('a failure that retrying cannot fix (bad key, no connection) is still shown
   assert.ok(log.errors.length >= 1);
 });
 
+test('plain yes / no answers are understood in code for English and Spanish two-option questions', async () => {
+  const { agent } = setup([]);
+  const q = (options) => ({ kind: 'radio', options });
+  assert.equal(agent.quickChoice(q(['Yes', 'No']), 'yeah'), 'Yes');
+  assert.equal(agent.quickChoice(q(['Sí', 'No']), 'sí, claro'), 'Sí');
+  assert.equal(agent.quickChoice(q(['Sí', 'No']), 'no, nunca'), 'No');
+  assert.equal(agent.quickChoice(q(['No', 'Yes']), 'yes'), 'Yes'); // order does not matter
+  assert.equal(agent.quickChoice(q(['Sí', 'No']), 'no sé'), null);
+  assert.equal(agent.quickChoice(q(['Single', 'Married']), 'yes'), null); // not a yes / no question
+  assert.equal(agent.quickChoice({ kind: 'text', options: [] }, 'yes'), null);
+});
+
 test('a long PDF: when a page is finished the assistant moves on to the next page, then finishes', async () => {
   const { agent, log } = setup([fill(['f1', 'Ana'])]);
   const pages = [[FIELDS[0]], [{ ...base, id: 'g1', kind: 'text', label: 'City' }]];
