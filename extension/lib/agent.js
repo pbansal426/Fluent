@@ -1,7 +1,7 @@
 // The conversation conductor. Code owns the order of questions and the privacy rules;
 // the model only translates and interprets what the user said.
 import { classify, redactPrivate } from './sensitive.js';
-import { groupChoices, matchOption } from './choices.js';
+import { groupChoices, matchOption, fuzzyOption } from './choices.js';
 import { validateValue, plainYesNo, looksLikeSkip } from './audit.js';
 import { detectLanguage, language } from './language.js';
 import {
@@ -343,7 +343,29 @@ export class Agent {
     }
   }
 
-  // What the model is allowed to see of the form.
+  // What the model is shown of the form: the current question in detail, the next few open ones, and what is answered.
+  // Not the whole form: forty fields of noise made a small model lose the question it had just asked.
+  modelView() {
+    const cur = this.current;
+    const brief = (f) => {
+      const o = { id: f.id, label: f.label, kind: f.kind };
+      if (f.section) o.section = f.section;
+      if (f.options.length) o.options = f.options;
+      if (f.required) o.required = true;
+      if (f.sensitive) o.private = true;
+      return o;
+    };
+    const recent = new Set([...this.values.keys()].slice(-5));
+    return {
+      current: cur ? { ...brief(cur), asks: this.tr(cur).explanation || undefined } : null,
+      open: this.fields.filter((f) => f !== cur && !this.filled.has(f.id) && !this.skipped.has(f.id)).slice(0, 8).map(brief),
+      answered: this.fields
+        .filter((f) => this.filled.has(f.id))
+        .map((f) => (f.sensitive ? { id: f.id, label: f.label, private: true } : { id: f.id, label: f.label, ...(recent.has(f.id) ? { value: this.values.get(f.id) } : {}) })),
+    };
+  }
+
+  // The older, whole-form view (kept for tests and tools).
   fieldsForModel() {
     return this.fields.map((f) => {
       const o = { id: f.id, label: f.label, kind: f.kind };
@@ -357,12 +379,12 @@ export class Agent {
     });
   }
 
-  async handleUser(text) {
+  async handleUser(text, meta = {}) {
     text = String(text || '').trim();
     if (!text || this.busy || !this.fields.length) return;
     this.busy = true;
     try {
-      await this.turn(text);
+      await this.turn(text, meta);
     } catch (e) {
       this.ui.error(e);
     } finally {
@@ -377,7 +399,7 @@ export class Agent {
     return !!said && [norm(this.phrases.skip_word), norm(this.phrases.btn_skip), 'skip'].includes(said);
   }
 
-  async turn(text) {
+  async turn(text, meta = {}) {
     const startedAt = Date.now();
     if (this.current && this.mode === 'listen' && this.isSkip(text)) {
       this.history.push(`- User said "${text}"; ${this.current.label} was skipped.`);
@@ -387,7 +409,14 @@ export class Agent {
     }
     // Pasted details may hold a private number: the model never sees it.
     const { text: said, redacted } = redactPrivate(text);
-    const quick = this.quickChoice(this.current, said);
+    // Other things the speech recogniser thought it heard (if it said so), best first.
+    const alts = (meta.alts || []).map((a) => redactPrivate(a).text).filter((a) => a && a.toLowerCase() !== said.toLowerCase()).slice(0, 3);
+    // A short answer to a choice question is matched in code, by meaning and by sound ("mail" -> "Male"), before the model is asked.
+    const shortAnswer = said.split(/\s+/).length <= 3 && !/\d/.test(said);
+    const fuzzy = this.current && ['select', 'radio'].includes(this.current.kind) && shortAnswer && !looksLikeSkip(said)
+      ? fuzzyOption(this.current.options, this.tr(this.current).options, [said, ...alts]) : null;
+    const quick = this.quickChoice(this.current, said) || fuzzy;
+    if (fuzzy && fuzzy !== this.quickChoice(this.current, said)) this.log('fuzzy-choice', { said, alts, chose: fuzzy });
     const res = quick ? { content: '', toolCalls: [{ name: 'fill_fields', args: { values: [{ field_id: this.current.id, value: quick }] } }] } : await this.llm.chat({
       messages: [
         {
@@ -396,7 +425,7 @@ export class Agent {
             userLang: this.userLang,
             formLang: this.formLang,
             current: this.current,
-            fields: this.fieldsForModel(),
+            view: this.modelView(),
             history: this.history.slice(-HISTORY_TURNS),
             context: this.context,
             asked: this.lastAsked,
@@ -404,7 +433,7 @@ export class Agent {
             lastFilled: this.lastFill,
           }),
         },
-        { role: 'user', content: said },
+        { role: 'user', content: alts.length ? `${said}\n\n(Speech recognition also considered: ${alts.map((a) => `"${a}"`).join(', ')})` : said },
       ],
       tools: TOOLS,
       toolChoice: 'required',

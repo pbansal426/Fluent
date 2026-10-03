@@ -1570,6 +1570,62 @@
     "first": "^Maria$",
     "last": null
    }
+  },
+  {
+   "id": "sex-5-mail-owner-recording",
+   "field": "sex",
+   "say": [
+    "mail"
+   ],
+   "fill": "^Male$"
+  },
+  {
+   "id": "sex-6-femail",
+   "field": "sex",
+   "say": [
+    "fe mail"
+   ],
+   "fill": "^Female$"
+  },
+  {
+   "id": "sex-7-lady",
+   "field": "sex",
+   "say": [
+    "I am a lady"
+   ],
+   "fill": "^Female$"
+  },
+  {
+   "id": "marital-7-marid",
+   "field": "marital",
+   "say": [
+    "marid"
+   ],
+   "fill": "^Married$"
+  },
+  {
+   "id": "marital-8-widow-sound",
+   "field": "marital",
+   "say": [
+    "widowed"
+   ],
+   "fill": "^Widowed$"
+  },
+  {
+   "id": "yn-16-da-owner-recording",
+   "field": "yesno",
+   "say": [
+    "da"
+   ],
+   "fill": "^Yes$"
+  },
+  {
+   "id": "city-4-again-owner-recording",
+   "field": "city",
+   "say": [
+    "again"
+   ],
+   "fill": null
   }
  ]
 }

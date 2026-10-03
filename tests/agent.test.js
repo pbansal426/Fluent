@@ -387,6 +387,43 @@ test('a failure that retrying cannot fix (bad key, no connection) is still shown
   assert.ok(log.errors.length >= 1);
 });
 
+test('"mail" for "male": a short answer to a choice question is matched in code, without asking the model', async () => {
+  const { agent, log, dom } = setup([fill(['f1', 'Ana'])]);
+  agent.llm.chat = async () => { throw new Error('the model must not be asked'); };
+  await agent.start();
+  agent.page.scan = null;
+  agent.current = agent.fields[1]; // Marital status: Single / Married
+  agent.mode = 'listen';
+  await agent.handleUser('marid'); // heard "marid" for "married"
+  assert.equal(dom.get('f2'), 'Married');
+  assert.equal(log.errors.length, 0);
+});
+
+test('the recogniser\'s other guesses and a slim view of the form reach the model', async () => {
+  const { agent, log } = setup([fill(['f1', 'Ana'])]);
+  await agent.start();
+  await agent.handleUser('Anna', { alts: ['Ana', 'Anna', 'Hannah'] });
+  const [system, user] = log.llmMessages.at(-1);
+  assert.match(user.content, /Speech recognition also considered: "Ana", "Hannah"/); // not repeating what was heard
+  assert.match(system.content, /MISHEARD/);
+  assert.match(system.content, /Current question, in detail: \{"id":"f1"/);
+  // later in the form, answered fields come as labels, and only the latest values are shown
+  assert.doesNotMatch(system.content, /"kind":"textarea"[^}]*"value"/);
+});
+
+test('the model is shown the current question, a few open ones, and what is answered (not forty fields of noise)', async () => {
+  const { agent } = setup([]);
+  const fs = Array.from({ length: 30 }, (_, i) => ({ ...base, id: `q${i}`, kind: 'text', label: `Question ${i}` }));
+  agent.page.scan = async () => ({ fields: structuredClone(fs), texts: [], pageLang: 'en' });
+  await agent.start();
+  agent.filled.add('q0'); agent.values.set('q0', 'zero'); agent.advance();
+  const view = agent.modelView();
+  assert.equal(view.current.id, 'q1');
+  assert.equal(view.open.length, 8); // the next few, not all 28
+  assert.deepEqual(view.answered, [{ id: 'q0', label: 'Question 0', value: 'zero' }]);
+  assert.ok(JSON.stringify(view).length < 1800);
+});
+
 test('the model reaching for skip_field on a mishearing does not skip; the choices are listed instead', async () => {
   const { agent, log, dom } = setup([
     fill(['f1', 'Ana']),

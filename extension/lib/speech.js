@@ -50,6 +50,7 @@ export function createSpeech() {
   let speakToken = 0;
   let finishSpeaking = null;
   let finishListening = null;
+  let lastAlts = []; // the recogniser's other guesses for the last thing it heard
   let neural = null; // optional { speak(text, lang), stop() }: a neural cloud voice, used while it works
 
   function voicesReady() {
@@ -136,11 +137,16 @@ export function createSpeech() {
       rec.lang = lang;
       rec.interimResults = true;
       rec.continuous = false;
+      rec.maxAlternatives = 4;
+      lastAlts = [];
       let finalText = '';
       rec.onresult = (e) => {
         let interim = '';
         for (let i = e.resultIndex; i < e.results.length; i++) {
-          if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+          if (e.results[i].isFinal) {
+            finalText += e.results[i][0].transcript;
+            lastAlts = Array.from(e.results[i]).slice(1).map((a) => a.transcript);
+          }
           else interim += e.results[i][0].transcript;
         }
         onInterim?.(finalText + interim);
@@ -161,5 +167,5 @@ export function createSpeech() {
     active?.abort();
   }
 
-  return { supported: !!Recognition, speak, stopSpeaking, listen, stopListening, setNeural: (n) => (neural = n || null), get neural() { return !!neural; } };
+  return { supported: !!Recognition, speak, stopSpeaking, listen, stopListening, setNeural: (n) => (neural = n || null), get neural() { return !!neural; }, get lastAlts() { return lastAlts; } };
 }

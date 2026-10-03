@@ -56,6 +56,44 @@ export function groupChoices(fields) {
   return out;
 }
 
+function editDistance(a, b) {
+  const row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return row[b.length];
+}
+
+// The one choice a short, possibly misheard answer points to ("mail" -> "Male"), compared with the choices as written and as
+// translated for the user. texts = what was heard plus the recogniser's other guesses. Null unless exactly one choice is clearly
+// the closest, so a real ambiguity still goes to the model.
+export function fuzzyOption(options, translated, texts) {
+  const heard = texts.map(normalize).filter(Boolean);
+  if (!heard.length || options.length < 2) return null;
+  const scored = options.map((option, i) => {
+    const forms = [option, translated?.[i]].filter(Boolean).map(normalize).filter(Boolean);
+    let d = Infinity;
+    for (const t of heard) {
+      for (const f of forms) {
+        if (t === f) d = 0;
+        else if (f.length >= 4 && t.length >= 3 && (f.startsWith(t) || t.startsWith(f))) d = Math.min(d, 0.5);
+        else d = Math.min(d, editDistance(t, f));
+      }
+    }
+    return { option, d, len: Math.min(...forms.map((f) => f.length)) };
+  });
+  scored.sort((a, b) => a.d - b.d);
+  const [first, second] = scored;
+  const limit = first.len >= 4 ? 2 : first.len >= 3 ? 1 : 0;
+  return first.d <= limit && second.d - first.d >= 1 ? first.option : null;
+}
+
 // Index of the option the user chose, or -1: exact match first, then a prefix either way ("yes" / "Yes, I have").
 export function matchOption(options, value) {
   const v = normalize(value);

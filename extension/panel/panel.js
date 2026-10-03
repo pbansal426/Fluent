@@ -9,7 +9,7 @@ import { createLog } from '../lib/log.js';
 import { createNeuralTts } from '../lib/neural-tts.js';
 
 // Shown at the bottom of the panel, so it is obvious which copy of the extension is running.
-const BUILD = '2026-10-03.15';
+const BUILD = '2026-10-03.16';
 const log = createLog();
 
 const DEFAULTS = {
@@ -21,6 +21,8 @@ const DEFAULTS = {
   live: true, // hands-free: listen automatically after the assistant speaks
   noThink: true,
 };
+// Talking over the assistant to interrupt it did not work reliably, so it is off for now (the code stays; set to true to try again).
+const TALK_OVER = false;
 const CONTENT_FILES = ['content/scan.js', 'content/overlay.js', 'content/fill.js', 'content/listen.js', 'content/content.js'];
 
 const $ = (id) => document.getElementById(id);
@@ -39,6 +41,7 @@ const state = {
   speaking: false,
   skipSpeech: false, // the user interrupted: stay quiet until this turn ends
   silentRounds: 0,
+  lastAlts: [], // the recogniser's other guesses for the last spoken answer
   micOk: false,
   pendingRescan: false,
   queue: [],
@@ -369,7 +372,7 @@ function phrasesFor(llm) {
     phraseJobs.set(
       code,
       (async () => {
-        const key = `phrases:v21:${code}`; // bump when PHRASES changes
+        const key = `phrases:v22:${code}`; // bump when PHRASES changes
         const cached = (await chrome.storage.local.get(key))[key];
         if (cached && Object.keys(PHRASES).every((k) => cached[k])) return cached;
         const phrases = await translatePhrases(llm, name);
@@ -451,7 +454,7 @@ function sendText(text, spoken = false) {
     render();
     return true;
   }
-  runTurn(() => state.agent.handleUser(text));
+  runTurn(() => state.agent.handleUser(text, { alts: spoken ? state.lastAlts : [] }));
   return true;
 }
 
@@ -562,6 +565,7 @@ async function listenOnce(byUser = false) {
   $('interim').hidden = true;
   if (text && state.typing) text = ''; // the user started typing meanwhile: the typed answer wins
   if (text) state.questionCut = false;
+  state.lastAlts = text ? speech.lastAlts : [];
   // The user cut the assistant off but then said nothing: the question was never heard, so ask it again right away.
   if (!text && state.questionCut && state.agent && state.voiceOn) {
     state.questionCut = false;
@@ -591,7 +595,7 @@ async function listenOnce(byUser = false) {
 // assistant at any moment. Without microphone permission the assistant just cannot be interrupted by voice.
 async function openLive() {
   closeLive();
-  if (!state.settings.live || !speech.supported) return;
+  if (!TALK_OVER || !state.settings.live || !speech.supported) return;
   const live = createLive({ onVoice: talkOver });
   let timer;
   try {

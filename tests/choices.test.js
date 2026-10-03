@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupChoices, matchOption } from '../extension/lib/choices.js';
+import { groupChoices, matchOption, fuzzyOption } from '../extension/lib/choices.js';
 
 const cb = (id, label, extra = {}) => ({ id, kind: 'checkbox', label, options: [], sensitive: false, required: false, ...extra });
 const text = (id, label) => ({ id, kind: 'text', label, options: [] });
@@ -46,4 +46,18 @@ test('the chosen option is matched loosely', () => {
   assert.equal(matchOption(['Male', 'Female'], 'female'), 1);
   assert.equal(matchOption(['Yes', 'No'], 'maybe'), -1);
   assert.equal(matchOption(['Sí', 'No'], 'si'), 0);
+});
+
+test('a misheard short answer is matched to the one choice it sounds like or means', () => {
+  const sex = ['Female', 'Male', 'Intersex', 'Prefer not to say'];
+  assert.equal(fuzzyOption(sex, null, ['mail']), 'Male'); // from the owner's recording
+  assert.equal(fuzzyOption(sex, null, ['femail']), 'Female');
+  assert.equal(fuzzyOption(sex, null, ['prefer not']), 'Prefer not to say');
+  assert.equal(fuzzyOption(sex, null, ['mel', 'male']), 'Male'); // another guess from the recogniser decides
+  assert.equal(fuzzyOption(sex, ['Femenino', 'Masculino', 'Intersexual', 'Prefiero no decirlo'], ['masculino']), 'Male'); // in the user's language
+  assert.equal(fuzzyOption(sex, null, ['banana']), null);
+  assert.equal(fuzzyOption(sex, null, ['fe']), null); // too short to be sure
+  assert.equal(fuzzyOption(['Married', 'Single'], null, ['marid']), 'Married');
+  assert.equal(fuzzyOption(['Single', 'Singles'], null, ['singl']), null); // two equally close: ask the model
+  assert.equal(fuzzyOption(['Yes', 'No'], null, ['now']), null);
 });
