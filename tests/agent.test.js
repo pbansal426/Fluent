@@ -117,7 +117,7 @@ test('skip, required typed field, and finishing', async () => {
 
 test('interpret only: a number the user never said is not written', async () => {
   const { agent, log, dom } = setup([fill(['f1', '555-0199']), fill(['f1', '1998-03-03']), fill(['f1', '52000'])]);
-  agent.page.scan = async () => ({ fields: [{ ...base, id: 'f1', kind: 'text', label: 'Amount' }], texts: [], pageLang: 'en' });
+  agent.page.scan = async () => ({ fields: [{ ...base, id: 'f1', kind: 'text', label: 'Reference code' }], texts: [], pageLang: 'en' });
   await agent.start();
   await agent.handleUser('my number is 555 0142'); // the model made up different digits
   assert.equal(dom.has('f1'), false);
@@ -295,7 +295,7 @@ test('two skips in a row inside one group skip the rest of that group', async ()
 
 test('"1 million", "2.5 mil" and "3k" are numbers the user said, not invented ones', async () => {
   const { agent, dom } = setup([fill(['f1', '1000000']), fill(['f1', '2500']), fill(['f1', '3000']), fill(['f1', '999999'])]);
-  agent.page.scan = async () => ({ fields: [{ ...base, id: 'f1', kind: 'text', label: 'Amount' }], texts: [], pageLang: 'en' });
+  agent.page.scan = async () => ({ fields: [{ ...base, id: 'f1', kind: 'text', label: 'Reference code' }], texts: [], pageLang: 'en' });
   await agent.start();
   await agent.handleUser('1 million');
   assert.equal(dom.get('f1'), '1000000');

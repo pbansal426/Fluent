@@ -760,7 +760,7 @@
     "我叫李明"
    ],
    "field": "first",
-   "fill": "(Li\\s?Ming|Ming\\s?Li|李明)"
+   "fill": "(Ming|李明)"
   },
   {
    "id": "name-10-husband",

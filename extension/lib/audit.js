@@ -40,8 +40,18 @@ export function expandScale(value) {
 const MONTH_WORDS = /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/i;
 const NUMERIC_DATE = /\b\d{1,4}\s*[\/.-]\s*\d{1,2}\s*[\/.-]\s*\d{1,4}\b/;
 
+const DAY_WORDS = /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|twenty|thirtieth|thirty|primero|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|diecis[eé]is|diecisiete|dieciocho|diecinueve|veinte|veinti\w+|treinta)\b/i;
+const hasDay = (said) => /\b\d{1,2}(?:st|nd|rd|th)?\b/.test(said.replace(/\b\d{4}\b/g, ' ')) || DAY_WORDS.test(said);
+
+// Fields that expect a number, and what a number looks like once written.
+const isNumeric = (f) => /wage|salary|income|amount|tax|total|compensation|tips|how many|number of|\bage\b|years|hours|\$|monto|salario|ingreso/i.test(f.label || '');
+const NUMBER = /^[\s$€£]*-?[\d.,]+\s*$/;
+const NAMEISH_NOISE = /^(yes|no|yeah|yep|nope|ok|okay|sure|s[ií]|vale|hello|hola|thanks|none|n\/a)$/i;
+
 export function validateValue(field, value, said = '') {
   const v = String(value ?? '').trim();
+  if (v && field.kind === 'date' && said && MONTH_WORDS.test(said) && !hasDay(said)) return { ok: false, reason: 'incomplete-date', phrase: 'invalid_date' };
+  if (v && isNumeric(field) && !['checkbox', 'radio', 'select', 'date'].includes(field.kind) && HEDGE.test(said)) return { ok: false, reason: 'unsure', phrase: 'invalid_unsure' };
   if (v && field.kind === 'date' && said && !MONTH_WORDS.test(said) && !NUMERIC_DATE.test(said)) return { ok: false, reason: 'incomplete-date', phrase: 'invalid_date' };
   if (v && ['checkbox', 'radio', 'select'].includes(field.kind) && HEDGE.test(said)) return { ok: false, reason: 'unsure', phrase: 'invalid_unsure' };
   if (!v || field.kind === 'checkbox' || field.kind === 'radio' || field.kind === 'select' || field.kind === 'date') return { ok: true, value: v };
@@ -49,6 +59,7 @@ export function validateValue(field, value, said = '') {
   if (/^\p{L}\.?$/u.test(v) && !/initial|inicial/i.test(field.label || '') && wordsOf(said).split(' ').length > 2) return { ok: false, reason: 'letter', phrase: 'invalid_letter' };
   const scaled = expandScale(v);
   if (scaled) return { ok: true, value: scaled };
+  if (isNumeric(field) && !NUMBER.test(v)) return { ok: false, reason: 'not-a-number', phrase: 'invalid_number' };
 
   if (isEmail(field)) {
     const email = spokenEmail(v);
@@ -58,14 +69,17 @@ export function validateValue(field, value, said = '') {
   }
   if (isPhone(field)) {
     const digits = v.replace(/\D/g, '');
-    return digits.length >= 7 && digits.length <= 15 && !/[\p{L}]{3,}/u.test(v.replace(/ext\.?|x\d+/gi, ''))
+    return digits.length >= 7 && digits.length <= 15 && !/[\p{L}]{3,}/u.test(v.replace(/\b(ext(ension)?\.?|x)\s*\d+/gi, ''))
       ? { ok: true, value: v }
       : { ok: false, reason: 'phone', phrase: 'invalid_phone' };
   }
   if (isZip(field)) {
+    const said9 = said.replace(/\D/g, '');
+    if (said9.length === 9 && v.replace(/\D/g, '').length === 5 && said9.startsWith(v.replace(/\D/g, ''))) return { ok: true, value: `${said9.slice(0, 5)}-${said9.slice(5)}` };
     return /\d/.test(v) && /^[\w\s-]{3,10}$/.test(v) ? { ok: true, value: v } : { ok: false, reason: 'zip', phrase: 'invalid_zip' };
   }
   if (isName(field)) {
+    if (NAMEISH_NOISE.test(v) || /\d/.test(said)) return { ok: false, reason: 'name', phrase: 'invalid_name' };
     const looksLikeName = /^[\p{L}\p{M}\s.'’,-]{1,60}$/u.test(v) && !/\b(first|last|middle|full|my|your)\s+name\b/i.test(v) && !/\b(dot|at|punto|arroba)\b/i.test(v);
     if (!looksLikeName) return { ok: false, reason: 'name', phrase: 'invalid_name' };
   }

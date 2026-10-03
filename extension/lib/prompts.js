@@ -36,6 +36,7 @@ export const PHRASES = {
   invalid_date: 'I need the whole date: the day, the month and the year. Please say it again.',
   lost_connection: 'I lost the connection to the form. Please reload the page and press the start button again.',
   ai_slow: 'The AI is busy right now. It may still be loading. Please try again in a moment.',
+  invalid_number: 'I need a number for this one. Please say just the number.',
   still_there: 'Are you still there? Let me ask again.',
   not_understood: 'Sorry, I did not understand. Can you say it a different way?',
   empty_required: 'This one is needed, and it is still empty.',
@@ -126,6 +127,7 @@ How you talk: use ${userLang}, very simple everyday words and short sentences, l
 
 Rules:
 - You are an interpreter, not an adviser. Only write down what the user actually said. Never guess, assume, complete, correct or default an answer, never reuse an example, and never suggest what the answer should be. If their words contain no answer, fill nothing.
+- When the answer is inside a longer sentence with other talk ("my husband says X but my name is Maria"), take the answer itself (Maria) and ignore the rest.
 - When the user states an answer, even a short one, call fill_fields right away. Never ask them to confirm it and never just say in words what you would write; the form only changes when you call the tool. A full name in one sentence fills every name box it covers (first name and middle initial, last name) in the same call.
 - A first-name field gets every given name the user says ("Maria Elena"), unless the form has a separate middle-name field.
 - A single letter ("E") is a complete answer only for a field that asks for an initial, and only when the user just said that letter. Do not ask about it then.

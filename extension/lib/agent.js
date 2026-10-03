@@ -373,7 +373,8 @@ export class Agent {
     }
     // Pasted details may hold a private number: the model never sees it.
     const { text: said, redacted } = redactPrivate(text);
-    const res = await this.llm.chat({
+    const quick = this.quickChoice(this.current, said);
+    const res = quick ? { content: '', toolCalls: [{ name: 'fill_fields', args: { values: [{ field_id: this.current.id, value: quick }] } }] } : await this.llm.chat({
       messages: [
         {
           role: 'system',
@@ -564,6 +565,16 @@ export class Agent {
     // Compared group by group, so reformatting ("3 de marzo de 1998" -> 1998-03-03, 52000 -> 52,000.00) passes.
     const groups = value.match(/\d{3,}/g) || [];
     return groups.some((group) => !known.some((k) => k.includes(group)));
+  }
+
+  // A plain "yes" / "no" (or "I am", "never", "sí") to a Yes / No question needs no interpreting.
+  quickChoice(field, said) {
+    if (!field?.members || !/^yes$/i.test(field.options?.[0] || '') || !/^no$/i.test(field.options?.[1] || '')) return null;
+    const t = String(said).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z' ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!t || t.split(' ').length > 8 || /\b(maybe|perhaps|probably|not sure|dont know|don't know|no se|quizas|tal vez|depends|what|why|how)\b/.test(t)) return null;
+    if (/^(no|nope|nah|never|nunca|negative|not really|no way|i am not|i'm not|im not|i do not|i don't|i dont|i have not|i haven't|i havent|i did not|i didn't|i didnt|i was not|i wasn't|para nada)\b/.test(t)) return 'No';
+    if (/^(yes|yeah|yep|yup|sure|of course|correct|right|i am|i'm|im|i do|i have|i did|i was|si|claro|por supuesto|afirmativo|exacto|ya)\b/.test(t)) return 'Yes';
+    return null;
   }
 
   // Writes a value into a field. A choice drawn as several checkboxes (Yes / No) ticks the chosen one only.

@@ -51,7 +51,14 @@ test('a hedge is not an answer to a choice, and scale words become digits', () =
   assert.equal(validateValue(f('Wages'), '1 million', '1 million').value, '1000000');
   assert.equal(validateValue(f('Wages'), '$2.5 mil', '').value, '2500');
   assert.equal(validateValue(f('Wages'), '3k dollars', '').value, '3000');
-  assert.equal(validateValue(f('Wages'), 'about a million', '').value, 'about a million'); // not a plain number: left alone
+  assert.equal(validateValue(f('Wages'), 'about a million', '').phrase, 'invalid_number'); // a number field needs a number
+  assert.equal(validateValue(f('Wages'), '52,000.50', '').ok, true);
+  assert.equal(validateValue(f('Wages'), '52000', "I'm not sure, maybe 52000").phrase, 'invalid_unsure');
+  assert.equal(validateValue(f('Date of birth', { kind: 'date' }), '1998-03-01', 'March 1998').phrase, 'invalid_date');
+  assert.equal(validateValue(f('Mobile phone'), '217 555 0198 extension 22', '').ok, true);
+  assert.equal(validateValue(f('ZIP Code'), '61801', '61801 1234').value, '61801-1234');
+  assert.equal(validateValue(f('Legal first name'), 'Maria', 'Maria 2').phrase, 'invalid_name');
+  assert.equal(validateValue(f('Legal first name'), 'yes', 'yes').phrase, 'invalid_name');
 });
 
 test('one letter is only an answer for an initial', () => {
