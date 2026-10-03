@@ -18,7 +18,7 @@
 <section id="settings" hidden>
   <label>AI endpoint (OpenAI-compatible)<input id="base-url" type="url" spellcheck="false"></label>
   <label>Model<input id="model" list="models" spellcheck="false"><datalist id="models"></datalist></label>
-  <label>API key (optional)<input id="api-key" type="password" autocomplete="off"></label>
+  <label>AI key (optional): paste any key from OpenAI, Claude, Gemini, Groq, OpenRouter or xAI and Fluent sets itself up<input id="api-key" type="password" autocomplete="off" spellcheck="false"></label>
   <label class="check"><input id="speak" type="checkbox"> Speak replies aloud</label>
   <label class="check"><input id="live" type="checkbox"> Hands-free conversation (listen automatically after speaking)</label>
   <label>Talk over the assistant<select id="barge-in"><option value="off">Off (tap the microphone)</option><option value="low">On, low sensitivity (speakers)</option><option value="normal">On, normal</option><option value="high">On, high sensitivity (headphones)</option></select></label>
@@ -26,6 +26,7 @@
   <div class="row">
     <button id="save-settings" class="primary small">Save</button>
     <button id="grant-mic" class="small">Allow microphone</button>
+    <button id="use-local" class="small">Use local model</button>
     <span id="settings-note" class="note"></span>
   </div>
 </section>

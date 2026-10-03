@@ -4,6 +4,7 @@ import { Agent } from '../lib/agent.js';
 import { PHRASES, translatePhrases } from '../lib/prompts.js';
 import { LANGUAGES, createSpeech } from '../lib/speech.js';
 import { createLive } from '../lib/live.js';
+import { detectProvider, pickModel } from '../lib/providers.js';
 
 const DEFAULTS = {
   baseUrl: 'http://localhost:1234/v1',
@@ -429,7 +430,8 @@ function sendText(text, spoken = false) {
     return true;
   }
   if (!spoken) state.voiceOn = false;
-  state.skipSpeech = true;
+  // Only a turn that is already talking is cut short; a spoken answer in live mode gets a spoken reply.
+  if (state.busy) state.skipSpeech = true;
   speech.stopSpeaking();
   cancelListening();
   bubble('user', text);
@@ -628,7 +630,7 @@ function toggleMic() {
 
 // ---------- wiring ----------
 
-$('lang').replaceChildren(...LANGUAGES.map((l) => Object.assign(document.createElement('option'), { value: l.code, textContent: `${l.native} — ${l.name}` })));
+$('lang').replaceChildren(...LANGUAGES.map((l) => Object.assign(document.createElement('option'), { value: l.code, textContent: l.native })));
 $('lang').addEventListener('change', async () => {
   await saveSettings();
   await reset();
@@ -644,6 +646,41 @@ $('save-settings').addEventListener('click', async () => {
   if (state.agent) await reset();
 });
 $('grant-mic').addEventListener('click', askForMic);
+
+// Paste any AI key and Fluent works out the service, its endpoint and a suitable model.
+let keyTimer;
+async function applyKey() {
+  const key = $('api-key').value.trim();
+  if (!key) return;
+  const provider = detectProvider(key);
+  if (!provider) {
+    $('settings-note').textContent = 'Key format not recognised. Set the endpoint address and model below.';
+    return;
+  }
+  $('base-url').value = provider.baseUrl;
+  $('settings-note').textContent = `Connecting to ${provider.name}…`;
+  try {
+    const models = await createClient({ baseUrl: provider.baseUrl, model: '', apiKey: key }).listModels();
+    $('models').replaceChildren(...models.map((id) => Object.assign(document.createElement('option'), { value: id })));
+    $('model').value = pickModel(provider, models);
+    $('settings-note').textContent = `${provider.name} connected, model ${$('model').value}. Your answers, except private fields, are sent to ${provider.name}.`;
+    await saveSettings();
+  } catch (e) {
+    $('settings-note').textContent = `${provider.name}: ${e.message}`;
+  }
+}
+$('api-key').addEventListener('input', () => {
+  clearTimeout(keyTimer);
+  keyTimer = setTimeout(applyKey, 400);
+});
+$('use-local').addEventListener('click', async () => {
+  Object.assign(state.settings, { baseUrl: DEFAULTS.baseUrl, model: DEFAULTS.model, apiKey: '' });
+  $('base-url').value = DEFAULTS.baseUrl;
+  $('model').value = DEFAULTS.model;
+  $('api-key').value = '';
+  await chrome.storage.local.set({ settings: state.settings });
+  await refreshModels();
+});
 $('start').addEventListener('click', start);
 $('send-form').addEventListener('submit', (e) => {
   e.preventDefault();
