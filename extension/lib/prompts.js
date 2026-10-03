@@ -2,7 +2,7 @@
 
 // Fixed things the assistant and the panel say. Translated once per language by the model.
 export const PHRASES = {
-  greeting: "Hi, I'm Fluent. I will help you fill out this form, one question at a time. You can talk to me or type. If you do not understand something, just ask me.",
+  greeting: "Hi, I'm Fluent. I'll help you with this form. You can talk to me or type.",
   type_private: 'This answer is private. Please type it in the box below. I will not hear it or see it.',
   type_long: 'This answer can be long. Please type it in the box on the form. You can write in your own language. Press Continue when you are done.',
   private_refused: 'That one is private. Please type it in the box below, not out loud.',
@@ -37,6 +37,7 @@ export const PHRASES = {
   lost_connection: 'I lost the connection to the form. Please reload the page and press the start button again.',
   ai_slow: 'The AI is busy right now. It may still be loading. Please try again in a moment.',
   invalid_number: 'I need a number for this one. Please say just the number.',
+  invalid_address: 'I need the street address with the street name, like 123 Main Street. Please say it again.',
   still_there: 'Are you still there? Let me ask again.',
   not_understood: 'Sorry, I did not understand. Can you say it a different way?',
   empty_required: 'This one is needed, and it is still empty.',

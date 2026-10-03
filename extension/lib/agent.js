@@ -2,7 +2,7 @@
 // the model only translates and interprets what the user said.
 import { classify, redactPrivate } from './sensitive.js';
 import { groupChoices, matchOption } from './choices.js';
-import { validateValue, plainYesNo } from './audit.js';
+import { validateValue, plainYesNo, looksLikeSkip } from './audit.js';
 import { detectLanguage, language } from './language.js';
 import {
   PHRASES,
@@ -420,6 +420,7 @@ export class Agent {
     let progressed = false;
     let target = null;
     let info = false;
+    let unclear = false;
 
     for (const call of res.toolCalls) {
       if (call.name === 'fill_fields') {
@@ -470,10 +471,15 @@ export class Agent {
         }
       } else if (call.name === 'skip_field') {
         const field = this.fields.find((f) => f.id === call.args.field_id) || this.current;
-        if (field && !this.filled.has(field.id)) {
+        if (field && !this.filled.has(field.id) && looksLikeSkip(text)) {
           this.skipped.add(field.id);
           if (this.noteSkip(field)) spoken.push(this.phrases.skipped_group);
           progressed = true;
+        } else if (field && !this.filled.has(field.id)) {
+          // The model reached for skip_field, but the user never asked to skip: a mishearing or something said to
+          // someone else. Ask again instead of silently moving on.
+          this.log('ignored-skip', { said, field: field.label });
+          unclear = true;
         }
       } else if (call.name === 'navigate') {
         const n = await this.navigate(call.args || {});
@@ -508,7 +514,12 @@ export class Agent {
       if (this.current) this.helpCount.set(this.current.id, (this.helpCount.get(this.current.id) || 0) + 1);
       return this.ui.say(reply);
     }
-    if (!refusedPrivate && !redacted && !spoken.length) await this.ui.say(this.phrases.not_understood);
+    if (!refusedPrivate && !redacted && !spoken.length) {
+      // Not understood: say so and ask the question again (with its choices, if it has any), so the user is never
+      // left wondering what was asked, for example after talking over the assistant or to someone else.
+      const again = this.current && this.mode === 'listen' ? this.lastSpoken : '';
+      await this.ui.say(again ? `${this.phrases.not_understood} ${again}` : this.phrases.not_understood);
+    }
   }
 
   // Moves around the form on the user's request. The model only names an action; code does it and

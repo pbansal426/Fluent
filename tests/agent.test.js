@@ -96,7 +96,7 @@ test('invalid option is not filled and the question stays', async () => {
   await agent.handleUser('es complicado');
   assert.equal(dom.has('f2'), false);
   assert.equal(agent.current.id, 'f2');
-  assert.equal(log.said.at(-1), agent.phrases.not_understood);
+  assert.ok(log.said.at(-1).startsWith(agent.phrases.not_understood)); // and the question follows, asked again
 });
 
 test('skip, required typed field, and finishing', async () => {
@@ -123,7 +123,7 @@ test('interpret only: a number the user never said is not written', async () => 
   await agent.start();
   await agent.handleUser('my number is 555 0142'); // the model made up different digits
   assert.equal(dom.has('f1'), false);
-  assert.equal(log.said.at(-1), agent.phrases.not_understood);
+  assert.ok(log.said.at(-1).startsWith(agent.phrases.not_understood)); // and the question follows, asked again
   await agent.handleUser('3 de marzo de 1998'); // reformatting what was said is interpreting
   assert.equal(dom.get('f1'), '1998-03-03');
   await agent.handleUser('fifty two thousand'); // no digits to compare: trusted
@@ -385,6 +385,28 @@ test('a failure that retrying cannot fix (bad key, no connection) is still shown
   await agent.start();
   await agent.translating;
   assert.ok(log.errors.length >= 1);
+});
+
+test('the model reaching for skip_field on a mishearing does not skip; the choices are listed instead', async () => {
+  const { agent, log, dom } = setup([
+    fill(['f1', 'Ana']),
+    { content: '', toolCalls: [{ name: 'skip_field', args: { field_id: 'f2' } }] }, // the recogniser heard "mail" for "male"
+    { content: '', toolCalls: [{ name: 'skip_field', args: { field_id: 'f2' } }] }, // and chatter to someone else
+    { content: '', toolCalls: [{ name: 'skip_field', args: { field_id: 'f2' } }] }, // and a real request
+  ]);
+  await agent.start();
+  await agent.handleUser('Ana');
+  assert.equal(agent.current.id, 'f2');
+  await agent.handleUser('mail');
+  assert.equal(agent.current.id, 'f2'); // not skipped
+  assert.equal(agent.skipped.size, 0);
+  assert.match(log.said.at(-1), /ES:Single, ES:Married/); // not understood, and the question (with its choices) is asked again
+  assert.match(log.said.at(-1), /^Sorry, I did not|^ES:|no entend|did not understand/i);
+  await agent.handleUser('can you put the speakers on');
+  assert.equal(agent.current.id, 'f2');
+  await agent.handleUser('no tengo'); // a real request to skip
+  assert.equal(agent.skipped.has('f2'), true);
+  assert.equal(agent.current.id, 'f3');
 });
 
 test('plain yes / no answers are understood in code for English and Spanish two-option questions', async () => {

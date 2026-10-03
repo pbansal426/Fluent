@@ -144,9 +144,9 @@ function anchor(tag, className, text, box, viewport) {
 }
 
 function attachLabels(annotations, textItems, viewport, pageHeight) {
-  const widgets = annotations.map((a) => ({ id: a.id, x1: a.rect[0], y1: a.rect[1], x2: a.rect[2], y2: a.rect[3], tip: a.alternativeText }));
+  const widgets = annotations.map((a) => ({ id: a.id, x1: a.rect[0], y1: a.rect[1], x2: a.rect[2], y2: a.rect[3], tip: a.alternativeText, radio: !!a.radioButton, group: a.fieldName, buttonValue: a.buttonValue }));
   const items = textItems.map((it) => ({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width, h: it.height }));
-  const { labels, texts, twins } = labelWidgets(widgets, items, pageHeight);
+  const { labels, texts, twins, radios } = labelWidgets(widgets, items, pageHeight);
 
   for (const w of widgets) {
     const el = controlFor(w.id);
@@ -155,6 +155,14 @@ function attachLabels(annotations, textItems, viewport, pageHeight) {
     // The same form printed a second time on the page: not asked about, just kept in step with the first.
     if (twins.has(w.id)) {
       el.dataset.fluentSkip = '';
+      continue;
+    }
+    const radio = radios.get(w.id);
+    if (radio) {
+      // each button says its own option; the group's question travels with it
+      el.removeAttribute('aria-labelledby');
+      el.setAttribute('aria-label', radio.option);
+      el.dataset.fluentGroup = radio.question;
       continue;
     }
     const label = labels.get(w.id);

@@ -82,7 +82,16 @@ export function createClient({ baseUrl, model, apiKey = '', disableThinking = tr
   async function post(body) {
     let res;
     try {
-      res = await fetchImpl(`${root}/chat/completions`, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
+      // One quiet retry on a network failure (a server restarting, a dropped connection): the request is safe to repeat.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          res = await fetchImpl(`${root}/chat/completions`, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
+          break;
+        } catch (e) {
+          if (attempt === 1 || e?.name === 'TimeoutError' || e?.name === 'AbortError') throw e;
+          await new Promise((r) => setTimeout(r, 900));
+        }
+      }
     } catch (e) {
       // A slow answer (a model still loading, a busy GPU) is not the same as an unreachable server.
       if (e?.name === 'TimeoutError' || e?.name === 'AbortError') throw new LlmError('timeout', `The AI endpoint at ${root} did not answer in time`);

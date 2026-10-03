@@ -72,6 +72,8 @@
 
   // The question a group of radios answers.
   function groupInfo(els) {
+    // Fluent's PDF viewer states the question of a radio group itself.
+    if (els[0].dataset.fluentGroup) return { text: els[0].dataset.fluentGroup, node: null, container: commonAncestor(els) };
     const fieldset = els[0].closest('fieldset');
     // A legend names the group only when the fieldset holds nothing but these radios.
     if (fieldset && fieldset.querySelectorAll('input,select,textarea').length === els.length) {

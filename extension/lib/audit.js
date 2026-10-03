@@ -12,6 +12,9 @@ const hint = (field) => `${field.label || ''} ${field.name || ''} ${field.htmlId
 const isEmail = (f) => f.inputType === 'email' || /e-?mail|correo/i.test(hint(f));
 const isPhone = (f) => f.inputType === 'tel' || /phone|tel[eé]fono|mobile|cell|celular|fax/i.test(hint(f));
 const isZip = (f) => /\bzip\b|postal|c[oó]digo postal/i.test(hint(f));
+const isAddress = (f) => /address|direcci[oó]n|street|calle/i.test(f.label || '') && !/e-?mail|correo|web|url|ip /i.test(f.label || '');
+// How a spoken sentence begins (as opposed to a name, a company or an address said on its own).
+const SENTENCE_START = /^(my|i|i'm|im|i've|ive|it|it's|its|the|well|so|um|uh|yes|yeah|no|me|mi|yo|es|soy|bueno|pues|este|that|this|we|our|you|since|because|actually)\b/;
 const isName = (f) => /\b(first|last|given|family|middle|full|legal)\s+name\b|\bapellido\b|\bnombre\b|\bsurname\b/i.test(f.label || '') && !/user\s*name|file\s*name|company|business|employer|street|school|city|country|state/i.test(f.label || '');
 
 // "maria dot lopez at gmail dot com" -> "maria.lopez@gmail.com" (also Spanish: punto, arroba)
@@ -47,6 +50,13 @@ const hasDay = (said) => /\b\d{1,2}(?:st|nd|rd|th)?\b/.test(said.replace(/\b\d{4
 const isNumeric = (f) => /wage|salary|income|amount|tax|total|compensation|tips|how many|number of|\bage\b|years|hours|\$|monto|salario|ingreso/i.test(f.label || '');
 const NUMBER = /^[\s$€£]*-?[\d.,]+\s*$/;
 const NAMEISH_NOISE = /^(yes|no|yeah|yep|nope|ok|okay|sure|s[ií]|vale|hello|hola|thanks|none|n\/a)$/i;
+
+// Did the user actually ask to skip, pass, or say they have no answer? Mishearings ("mail", "again", "da") and off-topic
+// chatter must not silently skip a question just because a small model reached for skip_field.
+export function looksLikeSkip(said) {
+  const t = String(said || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\p{L}\p{N}' /]+/gu, ' ').replace(/\s+/g, ' ').trim();
+  return /\b(skip|pass|next( one| question)?|move on|no thanks|i don't (have|know|want|remember)|i do not (have|know|want|remember)|i have no|i dont (have|know|want)|none|n\/?a|not applicable|doesn't apply|does not apply|prefer not|rather not|later|saltar|salta|omitir|omite|siguiente|paso|no tengo|no aplica|no se|no quiero|no recuerdo|prefiero no|despues)\b/.test(t);
+}
 
 // A plain yes / no in a few words ("yes", "I am", "never", "sí"): 'Yes', 'No', or null when it is anything else.
 export function plainYesNo(said) {
@@ -99,7 +109,9 @@ export function validateValue(field, value, said = '') {
     if (!looksLikeName) return { ok: false, reason: 'name', phrase: 'invalid_name' };
   }
   // The model copied the user's whole sentence into a short field: that is not an answer.
-  const sentence = wordsOf(said).split(' ').length >= 6;
+  const sentence = wordsOf(said).split(' ').length >= 6 && SENTENCE_START.test(wordsOf(said));
   if (!field.long && field.kind !== 'textarea' && sentence && wordsOf(v) === wordsOf(said)) return { ok: false, reason: 'echo', phrase: 'invalid_echo' };
+  // A street address needs words, not just a number ("111").
+  if (isAddress(field) && !/\p{L}{2,}/u.test(v)) return { ok: false, reason: 'address', phrase: 'invalid_address' };
   return { ok: true, value: v };
 }

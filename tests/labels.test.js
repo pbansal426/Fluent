@@ -123,6 +123,22 @@ test('a form printed twice on one page is detected', () => {
   assert.equal(findTwins(upper, 792).size, 0);
 });
 
+test('radio buttons: the question is the caption above, each option is the printed word to the right', () => {
+  const ws = [
+    { ...W('r1', 50, 600, 61, 611), radio: true, group: 'alergias', buttonValue: 'si' },
+    { ...W('r2', 100, 600, 111, 611), radio: true, group: 'alergias', buttonValue: 'no' },
+    { ...W('r3', 150, 600, 161, 611), radio: true, group: 'alergias', buttonValue: 'no_seguro' },
+  ];
+  const items = [
+    T(50, 616, 160, '¿Tiene alguna alergia?'), T(66, 603, 8, 'Sí'), T(116, 603, 10, 'No'),
+    T(166, 603, 20, 'No estoy'), T(190, 603, 30, 'seguro(a)'),
+  ];
+  const { labels, radios } = labelWidgets(ws, items, 800);
+  assert.equal(radios.get('r1').question, '¿Tiene alguna alergia?');
+  assert.deepEqual(['r1', 'r2', 'r3'].map((id) => radios.get(id).option), ['Sí', 'No', 'No estoy seguro(a)']);
+  assert.equal(labels.has('r1'), false); // their labels are the options, set by the viewer
+});
+
 test("the PDF's own tooltip labels fields that have no readable caption above or below", () => {
   const ws = [
     { ...W('a', 100, 600, 300, 612), tip: 'Part 2. Information About You. 1.B. Enter Given Name, First Name.' }, // caption sits to the left

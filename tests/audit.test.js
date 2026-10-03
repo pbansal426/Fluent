@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateValue, spokenEmail, plainYesNo } from '../extension/lib/audit.js';
+import { validateValue, spokenEmail, plainYesNo, looksLikeSkip } from '../extension/lib/audit.js';
 
 const f = (label, extra = {}) => ({ id: 'x', kind: 'text', label, options: [], ...extra });
 
@@ -89,6 +89,27 @@ test('a single checkbox becomes true or false from what the user said, never fre
   assert.equal(plainYesNo('I am'), 'Yes');
   assert.equal(plainYesNo('never'), 'No');
   assert.equal(plainYesNo('what do you mean?'), null);
+});
+
+test('real sentences from the owner\'s sessions: only a real request to skip skips', () => {
+  for (const said of ['mail', 'again', 'da', 'can you put the speakers MacBook Pro speakers', 'what does that mean', 'Bob']) assert.equal(looksLikeSkip(said), false, said);
+  for (const said of ['skip', 'skip this one', "I don't know", 'I do not have one', 'saltar', 'no tengo', 'next question please', 'prefiero no decirlo', 'none']) assert.equal(looksLikeSkip(said), true, said);
+});
+
+test('a long company name or address said on its own is an answer, a spoken sentence is not', () => {
+  const insurer = f('Compañía de seguros');
+  assert.equal(validateValue(insurer, 'Blue Cross and Blue Shield of Illinois PPO', 'Blue Cross and Blue Shield of Illinois PPO').ok, true);
+  assert.equal(validateValue(f('Street address'), '742 Green Street apartment 3 Urbana', '742 Green Street apartment 3 Urbana').ok, true);
+  const job = f('Occupation');
+  assert.equal(validateValue(job, 'I work as a cook in a restaurant downtown', 'I work as a cook in a restaurant downtown').phrase, 'invalid_echo');
+  assert.equal(validateValue(job, 'my job is working in a big restaurant', 'my job is working in a big restaurant').phrase, 'invalid_echo');
+});
+
+test('a street address needs words, not only a number', () => {
+  assert.equal(validateValue(f('Dirección (calle y número)'), '111', '111').phrase, 'invalid_address');
+  assert.equal(validateValue(f('Street address'), '111 Main Street', '111 Main Street').ok, true);
+  assert.equal(validateValue(f('Street address'), 'PO Box 123', 'PO Box 123').ok, true);
+  assert.equal(validateValue(f('Email address'), 'a@b.com', 'a@b.com').ok, true); // an email field is not an address field
 });
 
 test('choices, dates and checkboxes are left to their own matching', () => {

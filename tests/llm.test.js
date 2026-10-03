@@ -77,6 +77,15 @@ test('chatJson retries once on unparseable output', async () => {
   assert.deepEqual(await llm.chatJson({ messages: [] }), { a: 1 });
 });
 
+test('one network blip is retried quietly; a second one is reported', async () => {
+  let calls = 0;
+  const flaky = createClient({ baseUrl: 'http://x/v1', model: 'm', fetchImpl: async () => { calls++; if (calls === 1) throw new TypeError('Failed to fetch'); return ok({ content: 'hola' }); } });
+  assert.equal((await flaky.chat({ messages: [] })).content, 'hola');
+  assert.equal(calls, 2);
+  const down = createClient({ baseUrl: 'http://x/v1', model: 'm', fetchImpl: async () => { throw new TypeError('Failed to fetch'); } });
+  await assert.rejects(down.chat({ messages: [] }), (e) => e.kind === 'unreachable');
+});
+
 test('strictify adds additionalProperties:false to every object in a schema', () => {
   const fmt = { type: 'json_schema', json_schema: { name: 'x', strict: true, schema: { type: 'object', properties: { a: { type: 'array', items: { type: 'object', properties: { b: { type: 'string' } }, required: ['b'] } } }, required: ['a'] } } };
   const out = strictify(fmt).json_schema.schema;

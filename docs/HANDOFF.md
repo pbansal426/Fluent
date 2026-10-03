@@ -32,6 +32,13 @@ Evening state (build `2026-10-03.11`) — how to find and fix "intelligence erro
 - Panel: first message after the greeting is a plain-language overview of the form (`Agent.overview`); typing pauses the mic (`state.typing`), Enter resumes; natural voice: best installed browser voice, or OpenAI TTS when an OpenAI key is pasted (`lib/neural-tts.js`; untested with a real key); slow/busy model now says "busy" instead of "cannot reach".
 - Models: `google/gemma-4-26b-a4b-qat` was loaded by the owner late in the day; default is still `google/gemma-4-e4b` until the corpus has been compared on both (`MODEL=google/gemma-4-26b-a4b-qat node tools/run-corpus.mjs`).
 
+Log review of the owner's real recording sessions (build 14 → 15), `node tools/show-session.mjs <logfile> [n]` prints a session as a transcript. Silly errors found and fixed:
+- Mishearings ("mail" for "male", "again", "da") and off-topic talk made the model call `skip_field`, which silently skipped questions. `looksLikeSkip` (audit.js) now gates skipping; otherwise "not understood" and the question (with its choices) is asked again.
+- The "whole sentence" check rejected "Blue Cross and Blue Shield of Illinois PPO"; it now fires only when the text starts like a sentence ("I work as…", "my…"). "111" is no longer accepted as a street address.
+- Talking during the introduction (natural while recording) silenced the first question: after a talk-over with no answer, the question is asked again at once (`state.questionCut`); "Are you still there?" waits for 3 silent rounds; the greeting is shorter.
+- A single network blip no longer gives "Cannot reach the AI endpoint" (one quiet retry in `llm.js`).
+- `clinica-familiar-es.pdf` (a real fillable Spanish clinic form, `tools/make-clinic-pdf.py`, run with `uv run --with reportlab`) exercises PDF radio groups, drop-downs, a checkbox and two pages. PDF radio groups are now labelled properly (question above, option word to the right).
+
 Not done / open:
 - **Model quality**: `google/gemma-4-e4b` still repeats itself on the 3rd–4th help request and is the main quality ceiling. `qwen/qwen3.8-27b` is listed in LM Studio but has not been loaded or tested (shared GPU; owner must say so).
 - Scanned-PDF OCR, iframe scanning, custom (non-`<select>`) dropdowns: not started. Phone/QR web version: roadmap only.

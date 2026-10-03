@@ -89,6 +89,21 @@ function compactPlainTip(t) {
   return t.length <= 140 ? t : `…${t.slice(-120).replace(/^\S*\s+/, '')}`; // what tells fields apart is at the end
 }
 
+// The printed words just to the right of a small button on the same line, joined into one phrase.
+function wordsRightOf(w, texts) {
+  const near = texts
+    .filter((it) => it.y >= w.y1 - 4 && it.y <= w.y2 + 1 && it.x >= w.x2 - 1 && it.x - w.x2 <= 40)
+    .sort((a, b) => a.x - b.x);
+  if (!near.length) return '';
+  const chain = [near[0]];
+  for (const it of texts.filter((t) => t !== near[0] && t.y >= w.y1 - 4 && t.y <= w.y2 + 1 && t.x > near[0].x).sort((a, b) => a.x - b.x)) {
+    const last = chain.at(-1);
+    if (it.x - (last.x + last.w) <= 6) chain.push(it);
+    else break;
+  }
+  return chain.map((i) => i.str.trim()).join(' ').replace(/\s+/g, ' ').trim();
+}
+
 // Returns { labels: Map(id -> { text, box | null }), texts: [{ text, box }] }
 //   box  = where the caption is printed ({x, y, w, h}); null when the label was inferred from a neighbour
 //   texts = remaining printed lines (titles, instructions) worth translating
@@ -151,6 +166,22 @@ export function labelWidgets(widgets, items, pageHeight) {
     if (label && tip && counts.get(label.text) > 1 && tip !== label.text) labels.set(w.id, { text: tip, box: null, own: true });
   }
 
+  // Radio buttons: the question is the caption above the group's first button; each button's own label is the word
+  // printed to its right ("Sí", "No"). Without this every button would carry the whole question.
+  const radios = new Map();
+  const byGroup = new Map();
+  for (const w of active) if (w.radio) byGroup.set(w.group, [...(byGroup.get(w.group) || []), w]);
+  for (const [group, members] of byGroup) {
+    members.sort((a, b) => b.y2 - a.y2 || a.x1 - b.x1);
+    const first = labels.get(members[0].id);
+    const question = (first && /\p{L}{3}/u.test(first.text) ? first.text : cleanTip(members[0].tip)) || group;
+    for (const w of members) {
+      const option = wordsRightOf(w, texts) || String(w.buttonValue || '').replace(/[_-]+/g, ' ') || group;
+      radios.set(w.id, { question, option });
+      labels.delete(w.id);
+    }
+  }
+
   // Repeated labels get numbered so they can be told apart: "State", "State (2)".
   const seen = new Map();
   for (const w of active) {
@@ -167,5 +198,5 @@ export function labelWidgets(widgets, items, pageHeight) {
     .filter((it) => !used.has(it) && it.str.trim().length >= 12 && /\p{L}{4}/u.test(it.str))
     .map((it) => ({ text: it.str.trim(), box: boxOf([it]) }));
 
-  return { labels, texts: rest, twins };
+  return { labels, texts: rest, twins, radios };
 }

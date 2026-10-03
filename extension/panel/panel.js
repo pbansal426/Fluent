@@ -9,7 +9,7 @@ import { createLog } from '../lib/log.js';
 import { createNeuralTts } from '../lib/neural-tts.js';
 
 // Shown at the bottom of the panel, so it is obvious which copy of the extension is running.
-const BUILD = '2026-10-03.14';
+const BUILD = '2026-10-03.15';
 const log = createLog();
 
 const DEFAULTS = {
@@ -45,6 +45,7 @@ const state = {
   listenToken: 0,
   session: 0,
   muted: false, // the user paused the microphone for now
+  questionCut: false,
   typing: false, // a draft is in the text box: the microphone waits so voice and text never both answer
   typingTimer: null,
   live: null, // the open microphone stream of live mode
@@ -368,7 +369,7 @@ function phrasesFor(llm) {
     phraseJobs.set(
       code,
       (async () => {
-        const key = `phrases:v20:${code}`; // bump when PHRASES changes
+        const key = `phrases:v21:${code}`; // bump when PHRASES changes
         const cached = (await chrome.storage.local.get(key))[key];
         if (cached && Object.keys(PHRASES).every((k) => cached[k])) return cached;
         const phrases = await translatePhrases(llm, name);
@@ -521,7 +522,7 @@ async function recognise() {
   return res?.text || '';
 }
 
-const NUDGE_AFTER = 2; // silent rounds before the assistant gently asks again
+const NUDGE_AFTER = 3; // silent rounds before the assistant gently asks again
 const MAX_SILENT_ROUNDS = 6; // how many times to keep listening through silence before pausing
 
 // byUser: the user tapped the mic (so it is fine to open the permission tab); otherwise hands-free.
@@ -560,6 +561,13 @@ async function listenOnce(byUser = false) {
   state.listening = false;
   $('interim').hidden = true;
   if (text && state.typing) text = ''; // the user started typing meanwhile: the typed answer wins
+  if (text) state.questionCut = false;
+  // The user cut the assistant off but then said nothing: the question was never heard, so ask it again right away.
+  if (!text && state.questionCut && state.agent && state.voiceOn) {
+    state.questionCut = false;
+    render();
+    return runTurn(() => state.agent.repeat());
+  }
   if (text) {
     state.silentRounds = 0;
     render();
@@ -615,6 +623,7 @@ function talkOver() {
   log('talk-over', { afterMs: Math.round(performance.now() - state.speakStart) });
   state.skipSpeech = true;
   state.voiceOn = true;
+  state.questionCut = true; // the rest of what the assistant was saying (maybe the question) was not heard
   speech.stopSpeaking();
 }
 
