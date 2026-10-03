@@ -22,6 +22,7 @@
       'panel input locked on private field': out.atPrivateField.textDisabled && out.atPrivateField.micDisabled,
       'continues to phone': out.afterContinue.typeCard === null && !out.afterContinue.textDisabled,
       'no error banner': !out.afterContinue.banner,
+      'detected form language shown': out.afterContinue.formLanguage === 'Form language: English',
     };
   } catch (e) {
     out.error = String(e?.stack || e);

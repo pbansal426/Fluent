@@ -32,6 +32,8 @@ async function open(data, name) {
   $('name').textContent = state.name;
   // The PDF's own title ("2026 Form W-2") tells the model what kind of form this is.
   const meta = await state.doc.getMetadata().catch(() => null);
+  // The viewer's own HTML is English; only the PDF's language describes the form.
+  F.pdfLang = meta?.info?.Language || meta?.metadata?.get('dc:language') || '';
   document.title = meta?.info?.Title || state.name;
   $('empty').hidden = true;
   $('stage').hidden = false;

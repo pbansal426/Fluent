@@ -190,7 +190,7 @@
       fields.push(field);
     }
 
-    return { fields, texts: scanTexts(labelNodes), pageLang: document.documentElement.lang || '', title: document.title, url: location.href };
+    return { fields, texts: scanTexts(labelNodes), pageLang: F.pdfReady == null ? document.documentElement.lang || '' : '', pdfLang: F.pdfLang || '', title: document.title, url: location.href };
   };
 
   // Headings, instructions and buttons around the form, so the whole view can be translated.

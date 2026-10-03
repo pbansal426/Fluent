@@ -34,6 +34,7 @@
       'name filled from speech': /maria/i.test(input('e Primer nombre').value), // the last name may be asked separately
       'labels translated on the page': sim.page().querySelectorAll('.fluentLabelLayer .fluent-badge').length > 10,
       'no error banner': !out.afterName.banner,
+      'PDF language detected rather than viewer language': out.atSsn.formLanguage === 'Form language: Spanish',
     };
   } catch (e) {
     out.error = String(e?.stack || e);

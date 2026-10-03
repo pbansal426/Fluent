@@ -1,6 +1,7 @@
 // The conversation conductor. Code owns the order of questions and the privacy rules;
 // the model only translates and interprets what the user said.
 import { classify } from './sensitive.js';
+import { detectLanguage, language } from './language.js';
 import {
   PHRASES,
   TOOLS,
@@ -41,7 +42,7 @@ export class Agent {
     this.skipped = new Set();
     this.history = [];
     this.current = null;
-    this.formLang = 'English';
+    this.formLang = '';
     this.mode = 'idle'; // idle | listen | type | done
     this.busy = false;
   }
@@ -57,6 +58,10 @@ export class Agent {
     }
     // What kind of form this is, so the model can translate and explain in context.
     this.context = [scan.title, ...(scan.texts || []).slice(0, 3).map((t) => t.text)].filter(Boolean).join(' · ').slice(0, 300);
+    const detected = await detectLanguage(this.llm, scan);
+    this.formLang = detected.name;
+    this.sameLanguage = detected.code === language(this.userLang)?.code;
+    this.ui.language?.(this.formLang, this.sameLanguage);
     for (const f of this.fields) {
       if (!f.value) continue;
       this.filled.add(f.id);
@@ -81,6 +86,7 @@ export class Agent {
   }
 
   async translateAll(fields, texts) {
+    if (this.sameLanguage) return;
     const fieldChunks = [fields.slice(0, FIRST_CHUNK), ...chunks(fields.slice(FIRST_CHUNK), FIELD_CHUNK)].filter((c) => c.length);
     const jobs = fieldChunks.map((chunk) => {
       let resolve;
@@ -128,7 +134,6 @@ export class Agent {
     } catch (e) {
       this.ui.error(e);
     }
-    if (out?.form_language) this.formLang = out.form_language;
     const byId = new Map((out?.fields || []).map((t) => [t.id, t]));
     const applied = [];
     for (const f of chunk) {
@@ -165,7 +170,7 @@ export class Agent {
     this.ui.prompt({
       mode,
       field: f ? { id: f.id, label: this.tr(f).label, sensitive: f.sensitive, long: f.long } : null,
-      canTranslate: mode === 'type' && !!f && f.long && !f.sensitive,
+      canTranslate: mode === 'type' && !!f && f.long && !f.sensitive && !this.sameLanguage,
     });
   }
 

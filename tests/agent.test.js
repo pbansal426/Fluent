@@ -14,7 +14,7 @@ function setup(turns) {
   const dom = new Map();
   const log = { said: [], prompts: [], filled: [], llmMessages: [], errors: [] };
   const page = {
-    scan: async () => ({ fields: structuredClone(FIELDS), texts: [] }),
+    scan: async () => ({ fields: structuredClone(FIELDS), texts: [], pageLang: 'en' }),
     apply: async () => ({ ok: true }),
     highlight: async () => ({ ok: true }),
     focus: async () => ({ ok: true }),

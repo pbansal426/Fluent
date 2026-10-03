@@ -204,6 +204,10 @@ function bridge(send) {
 // ---------- conversation ----------
 
 const ui = {
+  language(name, sameLanguage) {
+    $('form-language').textContent = `Form language: ${name}`;
+    $('show-tr').parentElement.hidden = sameLanguage;
+  },
   async say(text) {
     bubble('agent', text);
     if (!state.settings.speak || state.skipSpeech) return;
@@ -298,6 +302,7 @@ async function start() {
     state.phrases = await phrasesFor(llm);
     state.agent = new Agent({ llm, page: bridge(send), ui, userLang: lang().name, phrases: state.phrases });
     $('transcript').replaceChildren();
+    $('form-language').textContent = 'Detecting form language…';
     // Hands-free by default: after the assistant speaks, it listens.
     state.voiceOn = state.settings.live && speech.supported;
     state.silentRounds = 0;
