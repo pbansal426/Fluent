@@ -9,7 +9,7 @@ import { createLog } from '../lib/log.js';
 import { createNeuralTts } from '../lib/neural-tts.js';
 
 // Shown at the bottom of the panel, so it is obvious which copy of the extension is running.
-const BUILD = '2026-10-03.13';
+const BUILD = '2026-10-03.14';
 const log = createLog();
 
 const DEFAULTS = {
@@ -138,7 +138,7 @@ function filledBubble(items) {
     const orig = document.createElement('span');
     orig.className = 'orig';
     orig.textContent = `(${it.original.replace(/[\s*:]+$/, '')})`;
-    row.append(strong, ` ${it.value} `, orig);
+    row.append(strong, ` ${it.shown ?? it.value} `, orig);
     b.appendChild(row);
   }
 }

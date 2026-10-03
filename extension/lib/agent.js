@@ -462,7 +462,7 @@ export class Agent {
           this.skipped.delete(field.id);
           this.skipStreak = { group: '', n: 0 };
           this.values.set(field.id, r.value);
-          done.push({ id: field.id, label: this.tr(field).label, original: field.label, value: r.value });
+          done.push({ id: field.id, label: this.tr(field).label, original: field.label, value: r.value, shown: this.shownValue(field, r.value) });
           this.log('fill', { field: field.label, value: r.value });
           this.lastFill = { field_id: field.id, label: field.label, value: r.value };
           if ((field.members || field.kind === 'radio') && /^(no|none|n\/a|not applicable)$/i.test(r.value)) this.skipDependents(field);
@@ -497,8 +497,7 @@ export class Agent {
     this.history.push(`- User said "${said}"; ${outcome || 'nothing was filled'}.`);
 
     if (done.length) {
-      this.ui.filled(done);
-      await this.ui.say(`${this.phrases.filled} ${done.map((d) => this.readBack(d).replace(/\.+$/, '')).join('. ')}.`);
+      this.ui.filled(done); // the green confirmation says it all; the assistant does not repeat it
     }
     if (refusedPrivate) await this.ui.say(this.phrases.private_refused);
     else if (redacted) await this.ui.say(this.phrases.redacted);
@@ -604,6 +603,13 @@ export class Agent {
     if (chosen < 0) return { ok: false };
     for (const [i, m] of field.members.entries()) await this.page.fill(m.id, i === chosen ? 'true' : 'false');
     return { ok: true, value: field.options[chosen] };
+  }
+
+  // What the green confirmation shows: a choice in the user's language, a checkbox as a tick, anything else as written.
+  shownValue(field, value) {
+    if (field.kind === 'checkbox') return value === 'true' ? '\u2713' : '\u2717';
+    const i = field.options.indexOf(value);
+    return i >= 0 && this.tr(field).options[i] ? this.tr(field).options[i] : value;
   }
 
   // Read choices back in the user's language, everything else as written.

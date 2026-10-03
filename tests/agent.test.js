@@ -64,7 +64,9 @@ test('one answer can fill several fields, then the private field is typed', asyn
   await agent.handleUser('Me llamo María y estoy casada');
   assert.equal(dom.get('f1'), 'María');
   assert.equal(dom.get('f2'), 'Married');
-  assert.match(log.said.at(-2), /ES:Marital status: ES:Married/); // read back in the user's language
+  // nothing is read back out loud; the green confirmation shows the choice in the user's language
+  assert.equal(log.said.some((t) => /ES:Marital status: ES:Married/.test(t)), false);
+  assert.equal(log.filled.find((i) => i.id === 'f2').shown, 'ES:Married');
   assert.equal(agent.current.id, 'f3');
   assert.equal(agent.mode, 'type');
   assert.equal(log.prompts.at(-1).canTranslate, false);
@@ -277,7 +279,8 @@ test('Yes / No checkboxes are asked as one question; the chosen box is ticked, t
   await agent.handleUser('no');
   assert.deepEqual(writes, [['y', 'false'], ['n', 'true']]);
   assert.equal(agent.mode, 'done');
-  assert.match(log.said.find((t) => t.startsWith(agent.phrases.filled)), /No/);
+  assert.equal(log.said.some((t) => t.startsWith(agent.phrases.filled)), false); // no "Got it. ..." read-back
+  assert.match(log.filled.at(-1).shown, /No/); // shown in the user's language
 });
 
 test('two skips in a row inside one group skip the rest of that group', async () => {
