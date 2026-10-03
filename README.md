@@ -12,7 +12,7 @@ Fill out any web form in your own language. Fluent translates the form in place 
 
 If the microphone does not work, the panel shows a yellow note with the reason and an error code (for example `not-allowed` or `network`). On a Mac, Chrome also needs microphone access in System Settings → Privacy & Security → Microphone.
 
-Private fields (SSN, passport, card numbers) are typed in the chat box, which shows dots; the value goes straight into the form and never to the AI. In the **Form** tab you can also see every field and type or pick answers yourself. Settings → "Talk over the assistant" controls whether speaking interrupts it (use headphones; tap the microphone to mute).
+Private fields (SSN, passport, card numbers) are typed in the chat box, which shows dots; the value goes straight into the form and never to the AI. Settings → "Talk over the assistant" controls whether speaking interrupts it (use headphones; tap the microphone to mute).
 
 ### PDF forms (Spanish W-2 demo, USCIS forms)
 

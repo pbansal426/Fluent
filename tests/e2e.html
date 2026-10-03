@@ -93,6 +93,27 @@ const CASES = {
       'form language detected': (formLang) => /english/i.test(formLang),
     }),
   },
+  // The demo video: a Spanish speaker, Form I-485 (needs i-485.pdf in the repo root), first fillable page.
+  i485: {
+    src: '../extension/pdf/viewer.html?file=/i-485.pdf',
+    userLang: 'Spanish',
+    skip: 'saltar',
+    answers: {
+      '1. Your Current Legal Name: Enter Family': ['mi apellido es López García'],
+      '1. Your Current Legal Name: Enter Given': ['María Elena'],
+      '3. Date of Birth': ['nací el 3 de marzo de 1998'],
+      'Have you ever used any other date of birth?: Select Yes': ['no, nunca'],
+    },
+    typed: {},
+    checks: (v) => ({
+      'last name': /l[oó]pez/i.test(v('1. Your Current Legal Name: Enter Family')),
+      'first name': /mar[ií]a/i.test(v('1. Your Current Legal Name: Enter Given')),
+      'other names left empty': !v('2. Other Names You Have Used Since Birth: Enter Family Name, Last Name'),
+      'date of birth': /(03.?03.?1998|1998.?03.?03)/.test(v('3. Date of Birth')),
+      'other birth date box not ticked': !v('Have you ever used any other date of birth?: Select Yes'),
+      'form language detected': (formLang) => /english/i.test(formLang),
+    }),
+  },
   // The owner's screenshots: an unsure user and "help me" must not put junk on the form.
   help: {
     src: '../demo/intake.html',

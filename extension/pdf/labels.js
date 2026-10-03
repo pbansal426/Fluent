@@ -47,6 +47,7 @@ export function findTwins(widgets, pageHeight) {
   return lower.length >= 5 && twins.size >= lower.length * 0.8 ? twins : new Map();
 }
 
+const OFFICE_ONLY = /^\s*(to be completed by an attorney|for (uscis|office|government|agency|official) use|office use only)/i;
 const GENERIC_TIP = /^(text|check ?box|radio( button)?|combo ?box|list ?box|field|button|text field|form field)\b[\s\d.:_-]*$/i;
 
 // A tooltip worth using as a label: real words, not "Text Field 3" or a bare field name.
@@ -65,13 +66,27 @@ const clip = (s, n) => (s.length <= n ? s : `${s.slice(0, n).replace(/\s+\S*$/, 
 function compactTip(t) {
   const matches = [...t.matchAll(/\b(\d+)\.\s?([A-Za-z])\.\s+/g)];
   const m = matches.at(-1);
-  if (!m) return t.length <= 140 ? t : `…${t.slice(-120).replace(/^\S*\s+/, '')}`; // what tells fields apart is at the end
+  if (!m) return compactPlainTip(t);
   const before = t.slice(0, m.index).split(/\.\s+/).map((s) => s.trim()).filter(Boolean);
   const action = clip(t.slice(m.index + m[0].length), 110);
   const short = (s) => s && s.length <= 45 && !/^part\b/i.test(s);
   const group = short(before[2]) ? before[2] : short(before.at(-1)) ? before.at(-1) : '';
   const item = `${m[1]}.${m[2].toUpperCase()}`;
   return group ? `${group}: ${item} ${action}` : `${item} ${action}`;
+}
+
+// Tooltips without lettered items: "...1. Your Current Legal Name (Do not provide a nickname). Enter Family Name, Last Name."
+//   -> "1. Your Current Legal Name: Enter Family Name, Last Name"
+// or a yes/no question: "Have you ever used any other date of birth? Select Yes." -> "Have you ever used any other date of birth?: Select Yes"
+function compactPlainTip(t) {
+  const parts = t.split(/(?<=[.?])\s+/).map((x) => x.trim()).filter(Boolean);
+  const action = clip(parts.at(-1).replace(/\.$/, ''), 110);
+  const before = t.slice(0, t.length - parts.at(-1).length);
+  const q = parts.at(-2);
+  if (q && /\?$/.test(q) && q.length <= 120) return `${q}: ${action}`;
+  const item = [...before.matchAll(/(?<!Part\s)\b(\d+)\.\s+([A-Z][^.?(]{3,70})/g)].at(-1);
+  if (item && parts.length > 1) return `${item[1]}. ${item[2].trim()}: ${action}`;
+  return t.length <= 140 ? t : `…${t.slice(-120).replace(/^\S*\s+/, '')}`; // what tells fields apart is at the end
 }
 
 // Returns { labels: Map(id -> { text, box | null }), texts: [{ text, box }] }
@@ -123,6 +138,19 @@ export function labelWidgets(widgets, items, pageHeight) {
     if (!label || label.own === false || !/\p{L}{3}/u.test(label.text)) labels.set(w.id, { text: tip, box: null, own: true });
   }
 
+  // Boxes for someone else to fill in (the attorney block, "For USCIS use only") are never asked of the applicant.
+  for (const w of active) if (OFFICE_ONLY.test(String(w.tip || ''))) labels.delete(w.id);
+
+  // The same caption printed for several fields ("Family Name" under two different headings): the tooltip,
+  // which names the heading, tells them apart better than a number does.
+  const counts = new Map();
+  for (const w of active) if (labels.has(w.id)) counts.set(labels.get(w.id).text, (counts.get(labels.get(w.id).text) || 0) + 1);
+  for (const w of active) {
+    const label = labels.get(w.id);
+    const tip = cleanTip(w.tip);
+    if (label && tip && counts.get(label.text) > 1 && tip !== label.text) labels.set(w.id, { text: tip, box: null, own: true });
+  }
+
   // Repeated labels get numbered so they can be told apart: "State", "State (2)".
   const seen = new Map();
   for (const w of active) {
@@ -130,7 +158,9 @@ export function labelWidgets(widgets, items, pageHeight) {
     if (!label) continue;
     const n = (seen.get(label.text) || 0) + 1;
     seen.set(label.text, n);
-    labels.set(w.id, { text: n > 1 ? `${label.text} (${n})` : label.text, box: label.box });
+    // Some forms give both boxes of a Yes / No pair the tooltip "Select Yes"; the second one is the No.
+    const text = n === 2 && /select yes$/i.test(label.text) ? label.text.replace(/select yes$/i, 'Select No') : n > 1 ? `${label.text} (${n})` : label.text;
+    labels.set(w.id, { text, box: label.box });
   }
 
   const rest = texts

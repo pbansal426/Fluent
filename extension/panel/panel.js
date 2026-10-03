@@ -43,7 +43,6 @@ const state = {
   live: null, // the open microphone stream of live mode
   speakStart: 0,
   falseBarges: 0,
-  view: 'chat', // chat | form
   away: false, // the user is on another tab: this session stays hidden and quiet
   resumeVoice: false,
 };
@@ -133,21 +132,14 @@ function filledBubble(items) {
 function render() {
   const p = state.phrases;
   const started = !!state.agent && !state.away;
-  const formView = started && state.view === 'form';
   const awayFromForm = !!state.agent && state.away;
   $('away-note').hidden = !awayFromForm;
   $('back-tab').hidden = !awayFromForm;
   $('away-note').textContent = p.away_note;
   $('back-tab').textContent = p.btn_back_tab;
   $('welcome').hidden = started;
-  $('chat').hidden = !started || formView;
-  $('composer').hidden = !started || formView;
-  $('view-tabs').hidden = !started;
-  $('form-view').hidden = !formView;
-  $('tab-chat').textContent = p.tab_chat;
-  $('tab-form').textContent = p.tab_form;
-  $('tab-chat').setAttribute('aria-pressed', String(!formView));
-  $('tab-form').setAttribute('aria-pressed', String(formView));
+  $('chat').hidden = !started;
+  $('composer').hidden = !started;
   $('start').textContent = lang().start;
   document.documentElement.lang = lang().code;
 
@@ -179,62 +171,6 @@ function render() {
   $('live-status').textContent = state.listening ? p.listening : '';
   for (const id of ['continue', 'skip', 'translate']) $(id).disabled = state.busy;
 }
-
-// The form as editable rows, so a user can type or pick answers instead of talking.
-// Private rows are masked and never shown again after saving.
-function renderFormView() {
-  if (!state.agent || state.view !== 'form') return;
-  const root = $('form-view');
-  if (root.contains(document.activeElement) && document.activeElement.tagName !== 'BODY') return; // do not steal focus mid-typing
-  const rows = state.agent.fieldView().map((f) => {
-    const row = document.createElement('div');
-    row.className = 'frow';
-    if (f.section && f.section !== rowSection.last) {
-      rowSection.last = f.section;
-      const h = document.createElement('h3');
-      h.textContent = f.section;
-      h.dir = 'auto';
-      row.append(h);
-    }
-    const label = document.createElement('label');
-    label.dir = 'auto';
-    label.textContent = f.label + (f.required ? ' *' : '');
-    let control;
-    if (f.kind === 'select' || f.kind === 'radio') {
-      control = document.createElement('select');
-      control.append(new Option('', ''));
-      for (const o of f.options) control.append(new Option(o.text, o.value));
-      control.value = f.value;
-    } else if (f.kind === 'checkbox') {
-      control = document.createElement('input');
-      control.type = 'checkbox';
-      control.checked = f.value === 'true';
-    } else if (f.kind === 'textarea') {
-      control = document.createElement('textarea');
-      control.rows = 3;
-      control.value = f.value;
-    } else {
-      control = document.createElement('input');
-      control.type = f.sensitive ? 'password' : f.kind === 'date' ? 'date' : 'text';
-      control.value = f.value;
-      if (f.sensitive) control.placeholder = f.filled ? '•••• (saved, private)' : state.phrases.input_private;
-    }
-    control.autocomplete = 'off';
-    control.dir = 'auto';
-    control.id = `fv-${f.id}`;
-    label.htmlFor = control.id;
-    control.addEventListener('change', () => {
-      const value = control.type === 'checkbox' ? String(control.checked) : control.value;
-      if (f.sensitive) control.value = ''; // never keep a private value in this panel
-      runTurn(() => state.agent.setValue(f.id, value));
-    });
-    row.append(label, control);
-    return row;
-  });
-  rowSection.last = null;
-  root.replaceChildren(...rows);
-}
-const rowSection = { last: null };
 
 // ---------- page bridge ----------
 
@@ -344,7 +280,6 @@ async function runTurn(fn) {
       state.voiceOn = false;
     }
     render();
-    renderFormView();
   }
   if (state.queue.length) {
     const text = state.queue.shift();
@@ -369,7 +304,7 @@ function phrasesFor(llm) {
     phraseJobs.set(
       code,
       (async () => {
-        const key = `phrases:v7:${code}`; // bump when PHRASES changes
+        const key = `phrases:v9:${code}`; // bump when PHRASES changes
         const cached = (await chrome.storage.local.get(key))[key];
         if (cached && Object.keys(PHRASES).every((k) => cached[k])) return cached;
         const phrases = await translatePhrases(llm, name);
@@ -421,7 +356,7 @@ async function reset() {
   speech.stopListening();
   closeLive();
   state.send?.({ type: 'fluent:clear' }).catch(() => {});
-  Object.assign(state, { away: false, view: 'chat', agent: null, send: null, mode: 'idle', field: null, busy: false, queue: [], pendingRescan: false, pageListen: false, voiceOn: false, muted: false, listening: false, speaking: false, skipSpeech: false, phrases: { ...PHRASES } });
+  Object.assign(state, { away: false, agent: null, send: null, mode: 'idle', field: null, busy: false, queue: [], pendingRescan: false, pageListen: false, voiceOn: false, muted: false, listening: false, speaking: false, skipSpeech: false, phrases: { ...PHRASES } });
   banner('');
   render();
 }
@@ -696,8 +631,6 @@ $('send-form').addEventListener('submit', (e) => {
   if (sendText(text)) $('text').value = '';
 });
 $('mic').addEventListener('click', toggleMic);
-$('tab-chat').addEventListener('click', () => { state.view = 'chat'; render(); });
-$('tab-form').addEventListener('click', () => { state.view = 'form'; render(); renderFormView(); });
 $('reveal').addEventListener('click', () => {
   state.reveal = !state.reveal;
   render();
@@ -739,7 +672,6 @@ function comeBack() {
   state.away = false;
   state.voiceOn = state.resumeVoice && !state.muted;
   render();
-  renderFormView();
   if (state.voiceOn && state.mode === 'listen' && !state.busy) listenOnce();
 }
 chrome.tabs.onActivated?.addListener(({ tabId }) => {

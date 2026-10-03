@@ -260,6 +260,38 @@ test('private value typed in chat goes straight to the field, never to the model
   assert.equal(await agent.submitPrivate('nope'), false); // not a private field any more
 });
 
+test('Yes / No checkboxes are asked as one question; the chosen box is ticked, the other cleared', async () => {
+  const { agent, log } = setup([fill(['y', 'No'])]);
+  const boxes = [
+    { ...base, id: 'y', kind: 'checkbox', label: 'Have you ever used another name?: Select Yes' },
+    { ...base, id: 'n', kind: 'checkbox', label: 'Have you ever used another name?: Select No' },
+  ];
+  const writes = [];
+  agent.page.scan = async () => ({ fields: structuredClone(boxes), texts: [], pageLang: 'en' });
+  agent.page.fill = async (id, v) => (writes.push([id, v]), { ok: true, value: v });
+  await agent.start();
+  assert.equal(agent.fields.length, 1);
+  assert.deepEqual(agent.fields[0].options, ['Yes', 'No']);
+  assert.match(log.said.at(-1), /Yes|ES:Yes/);
+  await agent.handleUser('no');
+  assert.deepEqual(writes, [['y', 'false'], ['n', 'true']]);
+  assert.equal(agent.mode, 'done');
+  assert.match(log.said.find((t) => t.startsWith(agent.phrases.filled)), /No/);
+});
+
+test('two skips in a row inside one group skip the rest of that group', async () => {
+  const { agent, log } = setup([]);
+  const fs = ['Other names: Family name', 'Other names: Given name', 'Other names: Middle name', 'Date of birth'].map((label, i) => ({ ...base, id: `o${i}`, kind: 'text', label }));
+  agent.page.scan = async () => ({ fields: structuredClone(fs), texts: [], pageLang: 'en' });
+  await agent.start();
+  await agent.handleUser('skip');
+  assert.equal(agent.current.id, 'o1'); // one skip: carry on asking
+  await agent.handleUser('skip');
+  assert.ok(log.said.includes(agent.phrases.skipped_group));
+  assert.equal(agent.current.id, 'o3'); // the third "other names" box was skipped with them
+  assert.deepEqual([...agent.skipped].sort(), ['o0', 'o1', 'o2']);
+});
+
 test('a long PDF: when a page is finished the assistant moves on to the next page, then finishes', async () => {
   const { agent, log } = setup([fill(['f1', 'Ana'])]);
   const pages = [[FIELDS[0]], [{ ...base, id: 'g1', kind: 'text', label: 'City' }]];
@@ -274,24 +306,4 @@ test('a long PDF: when a page is finished the assistant moves on to the next pag
   await agent.handleUser('skip');
   assert.equal(agent.mode, 'done');
   assert.equal(log.said.at(-1), agent.phrases.done);
-});
-
-test('form view: fields listed without private values; edits fill the page and advance', async () => {
-  const { agent, dom } = setup([fill(['f1', 'Ana'])]);
-  await agent.start();
-  await agent.handleUser('Ana');
-  let view = agent.fieldView();
-  assert.equal(view.find((v) => v.id === 'f1').value, 'Ana');
-  assert.deepEqual(view.find((v) => v.id === 'f2').options.map((o) => o.text), ['ES:Single', 'ES:Married']);
-  assert.equal((await agent.setValue('f2', 'Married')).ok, true); // typed in the form view while f2 is current
-  assert.equal(dom.get('f2'), 'Married');
-  assert.equal(agent.current.id, 'f3');
-  assert.equal((await agent.setValue('f3', '123-45-6789')).ok, true);
-  view = agent.fieldView();
-  assert.equal(view.find((v) => v.id === 'f3').value, ''); // never echoed back
-  assert.equal(view.find((v) => v.id === 'f3').filled, true);
-  assert.equal(agent.values.has('f3'), false);
-  await agent.setValue('f1', ''); // clearing
-  assert.equal(dom.has('f1'), false);
-  assert.equal(agent.filled.has('f1'), false);
 });

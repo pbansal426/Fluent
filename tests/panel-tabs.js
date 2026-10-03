@@ -35,7 +35,7 @@
   await sim.sleep(200);
   window.SIM_ACTIVATE(2);
   await sim.sleep(100);
-  checks['chat is hidden on another tab'] = p().getElementById('chat').hidden && p().getElementById('composer').hidden && p().getElementById('view-tabs').hidden;
+  checks['chat is hidden on another tab'] = p().getElementById('chat').hidden && p().getElementById('composer').hidden;
   checks['other tab is told what is going on'] = !p().getElementById('away-note').hidden && !p().getElementById('back-tab').hidden && p().getElementById('welcome').hidden === false;
   const before = spoken.length;
   release();

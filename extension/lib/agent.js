@@ -1,6 +1,7 @@
 // The conversation conductor. Code owns the order of questions and the privacy rules;
 // the model only translates and interprets what the user said.
 import { classify, redactPrivate } from './sensitive.js';
+import { groupChoices, matchOption } from './choices.js';
 import { detectLanguage, language } from './language.js';
 import {
   PHRASES,
@@ -22,6 +23,9 @@ const MAX_READBACK = 15;
 const MAX_REMAINING = 10;
 
 const chunks = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
+// The part of a form a field belongs to: its section, or the question heading in "Heading: item" labels.
+const headingOf = (f) => (f.label.includes(': ') ? f.label.split(': ')[0] : '');
+const groupOf = (f) => f.section || headingOf(f);
 // "Name *:" -> "Name"
 const bare = (label) => label.replace(/[\s*:.]+$/, '');
 // "Name" -> "Name."   "Need help?" -> "Need help?"
@@ -53,7 +57,8 @@ export class Agent {
   async start() {
     this.ui.status('scan');
     const scan = await this.page.scan();
-    this.fields = scan.fields.map((f) => ({ ...f, ...classify(f) }));
+    this.raw = new Map(scan.fields.map((f) => [f.id, { ...f, ...classify(f) }]));
+    this.fields = groupChoices([...this.raw.values()]);
     if (!this.fields.length) {
       this.setMode('idle');
       await this.ui.say(this.phrases.no_form);
@@ -79,9 +84,13 @@ export class Agent {
   // The form grew or shrank (multi-step forms): pick up the new fields, keep what is done.
   async rescan() {
     const scan = await this.page.scan();
+    const before = new Set(this.raw.keys());
+    this.raw = new Map(scan.fields.map((f) => [f.id, this.raw.get(f.id) || { ...f, ...classify(f) }]));
     const known = new Map(this.fields.map((f) => [f.id, f]));
-    const fresh = scan.fields.filter((f) => !known.has(f.id)).map((f) => ({ ...f, ...classify(f) }));
-    this.fields = scan.fields.map((f) => known.get(f.id) || fresh.find((n) => n.id === f.id));
+    const grouped = groupChoices([...this.raw.values()]);
+    // A group keeps its earlier object (and its translations) when its first box was already known.
+    this.fields = grouped.map((f) => (before.has(f.id) && known.get(f.id)) || f);
+    const fresh = this.fields.filter((f) => !this.translations.has(f.id) && !before.has(f.id));
     // The page rebuilt its registry, so translations must be re-attached.
     await this.page.apply({ fields: this.fields.filter((f) => this.translations.has(f.id)).map((f) => ({ id: f.id, ...this.translations.get(f.id) })) });
     if (fresh.length) this.translating = this.translateAll(fresh, []);
@@ -282,6 +291,7 @@ export class Agent {
     if (this.current && this.mode === 'listen' && this.isSkip(text)) {
       this.history.push(`- User said "${text}"; ${this.current.label} was skipped.`);
       this.skipped.add(this.current.id);
+      if (this.noteSkip(this.current)) await this.ui.say(this.phrases.skipped_group);
       return this.advance();
     }
     // Pasted details may hold a private number: the model never sees it.
@@ -339,10 +349,11 @@ export class Agent {
           }
           // Fluent only interprets: a number the user never gave does not go on the form.
           if (!copy && this.inventedNumber(String(value), text)) continue;
-          const r = await this.page.fill(field.id, String(value));
+          const r = await this.fillField(field, String(value));
           if (!r?.ok) continue;
           this.filled.add(field.id);
           this.skipped.delete(field.id);
+          this.skipStreak = { group: '', n: 0 };
           this.values.set(field.id, r.value);
           done.push({ id: field.id, label: this.tr(field).label, original: field.label, value: r.value });
           progressed = true;
@@ -351,6 +362,7 @@ export class Agent {
         const field = this.fields.find((f) => f.id === call.args.field_id) || this.current;
         if (field && !this.filled.has(field.id)) {
           this.skipped.add(field.id);
+          if (this.noteSkip(field)) spoken.push(this.phrases.skipped_group);
           progressed = true;
         }
       } else if (call.name === 'navigate') {
@@ -412,7 +424,7 @@ export class Agent {
       case 'clear': {
         const field = byId || cur;
         if (!field) return {};
-        const r = await this.page.fill(field.id, '');
+        const r = await this.fillField(field, '');
         if (!r?.ok) return {};
         this.filled.delete(field.id);
         this.skipped.delete(field.id);
@@ -421,9 +433,9 @@ export class Agent {
         return { say: `${this.phrases.cleared} ${label(field)}.`, target: reopen ? field : null, handled: this.mode === 'done', info: true, log: `you cleared ${field.label}` };
       }
       case 'skip_section': {
-        const section = (byId || cur)?.section;
+        const section = (byId || cur) && groupOf(byId || cur);
         if (!section) return {};
-        for (const f of this.fields) if (f.section === section && !this.filled.has(f.id)) this.skipped.add(f.id);
+        for (const f of this.fields) if (groupOf(f) === section && !this.filled.has(f.id)) this.skipped.add(f.id);
         return { say: this.phrases.skipped_section, handled: true, log: `you skipped the section "${section}"` };
       }
       case 'readback': {
@@ -457,6 +469,19 @@ export class Agent {
     // Compared group by group, so reformatting ("3 de marzo de 1998" -> 1998-03-03, 52000 -> 52,000.00) passes.
     const groups = value.match(/\d{3,}/g) || [];
     return groups.some((group) => !known.some((k) => k.includes(group)));
+  }
+
+  // Writes a value into a field. A choice drawn as several checkboxes (Yes / No) ticks the chosen one only.
+  async fillField(field, value) {
+    if (!field.members) return this.page.fill(field.id, value);
+    if (value === '') {
+      for (const m of field.members) await this.page.fill(m.id, '');
+      return { ok: true, value: '' };
+    }
+    const chosen = matchOption(field.options, value);
+    if (chosen < 0) return { ok: false };
+    for (const [i, m] of field.members.entries()) await this.page.fill(m.id, i === chosen ? 'true' : 'false');
+    return { ok: true, value: field.options[chosen] };
   }
 
   // Read choices back in the user's language, everything else as written.
@@ -510,45 +535,6 @@ export class Agent {
     }
   }
 
-  // The form as a list the user can edit directly (the panel's Form view). Private values are never exposed.
-  fieldView() {
-    return this.fields.map((f) => {
-      const t = this.tr(f);
-      return {
-        id: f.id,
-        label: bare(t.label),
-        kind: f.kind,
-        sensitive: !!f.sensitive,
-        required: !!f.required,
-        section: t.section || f.section || '',
-        options: f.options.map((value, i) => ({ value, text: t.options[i] || value })),
-        value: f.sensitive ? '' : this.values.get(f.id) ?? '',
-        filled: this.filled.has(f.id),
-        skipped: this.skipped.has(f.id),
-      };
-    });
-  }
-
-  // The user typed or picked an answer in the Form view. Same rules as everywhere: nothing here goes to the
-  // model, and private values are not remembered.
-  async setValue(id, value) {
-    const field = this.fields.find((f) => f.id === id);
-    if (!field || this.busy) return { ok: false };
-    value = String(value ?? '');
-    const r = await this.page.fill(id, value);
-    if (!r?.ok) return { ok: false };
-    if (value === '') {
-      this.filled.delete(id);
-      this.values.delete(id);
-    } else {
-      this.filled.add(id);
-      this.skipped.delete(id);
-      if (!field.sensitive) this.values.set(id, r.value);
-    }
-    if (this.current?.id === id && value !== '') await this.advance();
-    return { ok: true };
-  }
-
   // Nobody answered for a while: ask again, gently, like a person waiting.
   async nudge() {
     if (!this.current || this.mode !== 'listen') return;
@@ -558,7 +544,25 @@ export class Agent {
   async skipCurrent() {
     if (this.busy || !this.current) return;
     this.skipped.add(this.current.id);
+    if (this.noteSkip(this.current)) await this.ui.say(this.phrases.skipped_group);
     await this.advance();
+  }
+
+  // Two skips in a row inside one group of questions ("Other names": family name, given name, middle name)
+  // mean the user has nothing for that group: the rest of it is skipped too. True when that just happened.
+  noteSkip(field) {
+    const group = headingOf(field); // only a question heading, never a whole section
+    this.skipStreak = group && this.skipStreak?.group === group ? { group, n: this.skipStreak.n + 1 } : { group, n: 1 };
+    if (!group || this.skipStreak.n < 2) return false;
+    let more = false;
+    for (const f of this.fields) {
+      if (headingOf(f) === group && !this.filled.has(f.id) && !this.skipped.has(f.id)) {
+        this.skipped.add(f.id);
+        more = true;
+      }
+    }
+    this.skipStreak = { group: '', n: 0 };
+    return more;
   }
 
   // Long answers typed in the user's language can be translated into the form's language on request.
