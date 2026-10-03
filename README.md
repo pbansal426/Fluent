@@ -46,3 +46,5 @@ node tests/run-harness.mjs "http://127.0.0.1:8765/extension/pdf/viewer.html?file
 - `extension/panel/` — the side panel UI.
 - `extension/pdf/` — PDF viewer (pdf.js, vendored in `lib/`) and position-based label matching.
 - `docs/superpowers/specs/` — design.
+
+**Picking this project up?** Start with `docs/HANDOFF.md`.
