@@ -60,6 +60,28 @@ const CASES = {
       'form language detected': (formLang) => /english/i.test(formLang),
     }),
   },
+  // The owner's screenshots: an unsure user and "help me" must not put junk on the form.
+  help: {
+    src: '../demo/intake.html',
+    userLang: 'English',
+    skip: 'skip',
+    stopAt: 'Mobile phone',
+    answers: {
+      'Legal first name': ['Maria'],
+      'Insurance provider': ["i don't know how to spell it but its the one that started with G and the avatar is a gecko"],
+      'Street address': ['help me with this one', 'help me more'],
+      City: ['Urbana'],
+    },
+    typed: { 'Social Security Number': { value: SSN }, 'Member ID number': { value: '' } },
+    checks: (v, typedLabels, agent, out) => ({
+      'name filled': v('Legal first name') === 'Maria',
+      'described insurer is not written': !v('Insurance provider'),
+      'help does not fill the street': !v('Street address'),
+      'city filled after help': v('City') === 'Urbana',
+      'help replies are real explanations': out.transcript.filter((l) => l.startsWith('AGENT:')).every((l) => !/what would you like help with|what do you need help/i.test(l)),
+      'form language detected': (formLang) => /english/i.test(formLang),
+    }),
+  },
   w2: {
     src: '../extension/pdf/viewer.html?file=/fw2_es.pdf',
     userLang: 'English',
@@ -150,6 +172,7 @@ async function run() {
   const typedLabels = [];
   for (let step = 0; step < 90 && agent.mode !== 'done' && agent.current; step++) {
     const field = agent.current;
+    if (testCase.stopAt && field.label.startsWith(testCase.stopAt)) break;
     console.log(`step ${step}: ${agent.mode} "${field.label}"`);
     if (agent.mode === 'type') {
       const typed = find(testCase.typed, field.label) || { value: '' };
@@ -192,8 +215,8 @@ async function run() {
   const sorted = [...out.turns].sort((a, b) => a - b);
   out.turnMs = { median: sorted[Math.floor(sorted.length / 2)], max: sorted.at(-1) };
 
-  const checks = { finished: agent.mode === 'done', 'ssn never sent to model': !sent.some((s) => s.includes(SSN)), 'no errors': out.errors.length === 0 };
-  for (const [name, result] of Object.entries(testCase.checks(value, typedLabels))) checks[name] = typeof result === 'function' ? result(agent.formLang) : result;
+  const checks = { finished: agent.mode === 'done' || !!testCase.stopAt, 'ssn never sent to model': !sent.some((s) => s.includes(SSN)), 'no errors': out.errors.length === 0 };
+  for (const [name, result] of Object.entries(testCase.checks(value, typedLabels, agent, out))) checks[name] = typeof result === 'function' ? result(agent.formLang) : result;
   out.checks = checks;
   out.summary = `${Object.values(checks).filter(Boolean).length}/${Object.keys(checks).length} passed`;
   return out;

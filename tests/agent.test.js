@@ -244,3 +244,18 @@ test('a value containing a redacted placeholder is never written', async () => {
   await agent.handleUser('Ana 123-45-6789');
   assert.equal(dom.has('f1'), false);
 });
+
+test('private value typed in chat goes straight to the field, never to the model or the log', async () => {
+  const { agent, log, dom } = setup([fill(['f1', 'Ana'], ['f2', 'Single'])]);
+  await agent.start();
+  await agent.handleUser('Ana, soltera');
+  assert.equal(agent.current.id, 'f3');
+  assert.equal(await agent.submitPrivate('123-45-6789'), true);
+  assert.equal(dom.get('f3'), '123-45-6789');
+  assert.equal(agent.filled.has('f3'), true);
+  assert.equal(agent.values.has('f3'), false);
+  assert.ok(log.said.includes(agent.phrases.private_saved));
+  assert.equal(agent.current.id, 'f4');
+  assert.equal(JSON.stringify(log).includes('123-45-6789'), false);
+  assert.equal(await agent.submitPrivate('nope'), false); // not a private field any more
+});

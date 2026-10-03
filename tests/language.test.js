@@ -27,17 +27,21 @@ test('without metadata detection uses labels only, never field values', async ()
   assert.match(sent, /Apellido/);
 });
 
-test('same language assists without translation calls or badges', async () => {
-  let applies = 0, shown;
+test('same language gets simple questions but no translation badges', async () => {
+  let applies = 0, shown, calls = 0;
+  const said = [];
   const agent = new Agent({
     userLang: 'English',
-    llm: { chatJson: () => { throw new Error('translation is unnecessary'); } },
+    llm: { chatJson: async ({ messages }) => { calls++; assert.match(messages[0].content, /already in English/); return { form_language: 'English', fields: [{ id: 'f1', label: 'Simplified label', explanation: 'Your first name.', question: 'What is your first name?', options: [], section: '', english: 'First name' }] }; } },
     page: { scan: async () => ({ pageLang: 'en-US', fields: [{ id: 'f1', kind: 'text', label: 'First name', options: [] }] }), apply: async () => { applies++; }, highlight: async () => {} },
-    ui: { language: (...args) => { shown = args; }, status() {}, prompt() {}, say: async () => {} },
+    ui: { language: (...args) => { shown = args; }, status() {}, prompt() {}, say: async (t) => void said.push(t) },
   });
   await agent.start();
   await agent.translating;
   assert.deepEqual(shown, ['English', true]);
   assert.equal(applies, 0);
+  assert.equal(calls, 1);
+  assert.equal(agent.tr(agent.fields[0]).label, 'First name'); // the form's own label is kept
+  assert.match(said.at(-1), /^What is your first name\?/);
   assert.equal(agent.mode, 'listen');
 });

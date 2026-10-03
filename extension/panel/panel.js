@@ -138,13 +138,14 @@ function render() {
     $('translate').hidden = !state.canTranslate;
   }
   $('show-tr-label').textContent = p.show_translations;
-  // While a private field is open, nothing typed or spoken here should be able to carry its value.
-  $('text').disabled = privateField;
-  $('send').disabled = privateField;
+  // A private field is typed here, masked, and goes straight to the form: never to the model.
+  $('text').type = privateField && !state.reveal ? 'password' : 'text';
+  $('reveal').hidden = !privateField;
+  $('reveal').setAttribute('aria-pressed', String(!!state.reveal));
   // While the assistant is talking the mic button interrupts it, whatever the field.
   $('mic').disabled = !speech.supported || (!state.speaking && (typing || state.mode === 'done'));
   $('mic').title = state.speaking ? 'Tap to interrupt' : typing ? 'The microphone is off while you type this answer' : 'Microphone';
-  $('text').placeholder = p.input_placeholder;
+  $('text').placeholder = privateField ? p.input_private : p.input_placeholder;
   $('mic').classList.toggle('armed', state.voiceOn);
   $('mic').classList.toggle('on', state.listening);
   $('mic').classList.toggle('speaking', state.speaking);
@@ -337,8 +338,12 @@ function sendText(text, spoken = false) {
   text = text.trim();
   if (!text || !state.agent) return false;
   if (state.mode === 'type' && state.field?.sensitive) {
-    banner(state.phrases.type_private, 'info');
-    return false;
+    // Spoken text never reaches a private field; only what is typed here does.
+    if (spoken) return false;
+    if (state.busy) return false;
+    bubble('user', '••••••••');
+    runTurn(() => state.agent.submitPrivate(text));
+    return true;
   }
   if (!spoken) state.voiceOn = false;
   state.skipSpeech = true;
@@ -519,6 +524,10 @@ $('send-form').addEventListener('submit', (e) => {
   if (sendText(text)) $('text').value = '';
 });
 $('mic').addEventListener('click', toggleMic);
+$('reveal').addEventListener('click', () => {
+  state.reveal = !state.reveal;
+  render();
+});
 $('continue').addEventListener('click', () => runTurn(() => state.agent.continueTyped()));
 $('skip').addEventListener('click', () => runTurn(() => state.agent.skipCurrent()));
 $('translate').addEventListener('click', () => runTurn(() => state.agent.translateTyped()));

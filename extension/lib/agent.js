@@ -43,6 +43,7 @@ export class Agent {
     this.filled = new Set();
     this.skipped = new Set();
     this.history = [];
+    this.helpCount = new Map(); // field id -> times the user got help without answering
     this.current = null;
     this.formLang = '';
     this.mode = 'idle'; // idle | listen | type | done
@@ -88,7 +89,8 @@ export class Agent {
   }
 
   async translateAll(fields, texts) {
-    if (this.sameLanguage) return;
+    // Same language: no badges or text translation, but the questions still get simple wording.
+    if (this.sameLanguage) texts = [];
     const fieldChunks = [fields.slice(0, FIRST_CHUNK), ...chunks(fields.slice(FIRST_CHUNK), FIELD_CHUNK)].filter((c) => c.length);
     const jobs = fieldChunks.map((chunk) => {
       let resolve;
@@ -122,7 +124,7 @@ export class Agent {
     try {
       out = await this.llm.chatJson({
         messages: [
-          { role: 'system', content: translateFieldsPrompt(this.userLang, this.context) },
+          { role: 'system', content: translateFieldsPrompt(this.userLang, this.context, this.sameLanguage) },
           {
             role: 'user',
             content: JSON.stringify(
@@ -143,14 +145,20 @@ export class Agent {
       const options = t && Array.isArray(t.options) && t.options.length === f.options.length ? t.options : f.options;
       // Small models sometimes hand the label back untranslated; for English there is a second source.
       const english = /^english$/i.test(this.userLang) && t?.english;
-      const label = (t?.label && t.label !== f.label ? t.label : english) || t?.label || f.label;
-      const tr = { label, explanation: t?.explanation || '', question: (t?.question || '').trim(), options, section: f.section ? t?.section || f.section : '' };
+      const label = this.sameLanguage ? f.label : (t?.label && t.label !== f.label ? t.label : english) || t?.label || f.label;
+      const tr = {
+        label,
+        explanation: t?.explanation || '',
+        question: (t?.question || '').trim(),
+        options: this.sameLanguage ? f.options : options,
+        section: f.section ? (this.sameLanguage ? f.section : t?.section || f.section) : '',
+      };
       this.translations.set(f.id, tr);
-      applied.push({ id: f.id, ...tr });
+      if (!this.sameLanguage) applied.push({ id: f.id, ...tr });
       // The privacy rules read English; on a form in another language, check the English label too.
       if (t?.english && !f.sensitive && classify({ ...f, label: t.english }).sensitive) f.sensitive = true;
     }
-    await this.page.apply({ fields: applied });
+    if (applied.length) await this.page.apply({ fields: applied });
   }
 
   tr(field) {
@@ -284,6 +292,7 @@ export class Agent {
             history: this.history.slice(-HISTORY_TURNS),
             context: this.context,
             asked: this.lastAsked,
+            helped: this.helpCount.get(this.current?.id) || 0,
           }),
         },
         { role: 'user', content: said },
@@ -368,7 +377,10 @@ export class Agent {
     for (const s of spoken) await this.ui.say(s);
     // Reading things out is not an answer: carry on with the question that is waiting.
     if (progressed || (info && this.mode !== 'done')) return this.advance(target);
-    if (reply) return this.ui.say(reply);
+    if (reply) {
+      if (this.current) this.helpCount.set(this.current.id, (this.helpCount.get(this.current.id) || 0) + 1);
+      return this.ui.say(reply);
+    }
     if (!refusedPrivate && !redacted && !spoken.length) await this.ui.say(this.phrases.not_understood);
   }
 
@@ -464,6 +476,32 @@ export class Agent {
       if (!field.sensitive) this.values.set(field.id, r.value);
     }
     await this.advance();
+  }
+
+  // A private value typed in the chat box. It goes straight to the field: never to the model,
+  // never into history, values or the transcript.
+  async submitPrivate(text) {
+    const field = this.current;
+    text = String(text || '').trim();
+    if (this.busy || !text || !field?.sensitive || this.mode !== 'type') return false;
+    this.busy = true;
+    try {
+      const r = await this.page.fill(field.id, text);
+      if (!r?.ok) {
+        await this.ui.say(this.phrases.private_failed);
+        return false;
+      }
+      this.filled.add(field.id);
+      this.skipped.delete(field.id);
+      await this.ui.say(this.phrases.private_saved);
+      await this.advance();
+      return true;
+    } catch (e) {
+      this.ui.error(e);
+      return false;
+    } finally {
+      this.busy = false;
+    }
   }
 
   async skipCurrent() {
