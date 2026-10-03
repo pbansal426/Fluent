@@ -67,7 +67,7 @@ export function createClient({ baseUrl, model, apiKey = '', disableThinking = tr
   async function post(body) {
     let res;
     try {
-      res = await fetchImpl(`${root}/chat/completions`, { method: 'POST', headers, body: JSON.stringify(body) });
+      res = await fetchImpl(`${root}/chat/completions`, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
     } catch (e) {
       throw new LlmError('unreachable', `Cannot reach the AI endpoint at ${root}`);
     }
@@ -132,7 +132,7 @@ export function createClient({ baseUrl, model, apiKey = '', disableThinking = tr
   async function listModels() {
     let res;
     try {
-      res = await fetchImpl(`${root}/models`, { headers });
+      res = await fetchImpl(`${root}/models`, { headers, signal: AbortSignal.timeout(10000) });
     } catch {
       throw new LlmError('unreachable', `Cannot reach the AI endpoint at ${root}`);
     }

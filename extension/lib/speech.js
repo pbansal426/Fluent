@@ -21,6 +21,8 @@ export function createSpeech() {
   const synth = globalThis.speechSynthesis;
   let rec = null;
   let speakToken = 0;
+  let finishSpeaking = null;
+  let finishListening = null;
 
   function voicesReady() {
     return new Promise((resolve) => {
@@ -48,19 +50,26 @@ export function createSpeech() {
 
   async function speak(text, lang) {
     if (!synth || !text) return;
+    stopSpeaking();
     const token = ++speakToken;
-    synth.cancel();
     const voice = pickVoice(await voicesReady(), lang);
     for (const part of sentences(text)) {
       if (token !== speakToken) return;
       await new Promise((resolve) => {
+        let timer;
+        const finish = () => {
+          clearTimeout(timer);
+          if (finishSpeaking === finish) finishSpeaking = null;
+          resolve();
+        };
+        finishSpeaking = finish;
         const u = new SpeechSynthesisUtterance(part);
         u.lang = lang;
         if (voice) u.voice = voice;
         u.rate = 1;
-        u.onend = u.onerror = resolve;
+        u.onend = u.onerror = finish;
         // Chrome sometimes never fires onend; don't let the conversation hang on it.
-        setTimeout(resolve, 4000 + part.length * 150);
+        timer = setTimeout(finish, 4000 + part.length * 150);
         synth.speak(u);
       });
     }
@@ -68,6 +77,7 @@ export function createSpeech() {
 
   function stopSpeaking() {
     speakToken++;
+    finishSpeaking?.();
     synth?.cancel();
   }
 
@@ -75,7 +85,20 @@ export function createSpeech() {
   function listen(lang, { onInterim } = {}) {
     return new Promise((resolve, reject) => {
       if (!Recognition) return reject(new Error('unsupported'));
-      rec = new Recognition();
+      stopListening();
+      const active = rec = new Recognition();
+      let settled = false;
+      const finish = (error, text = '') => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (rec === active) rec = null;
+        if (finishListening === finish) finishListening = null;
+        if (error) reject(new Error(error));
+        else resolve(text);
+      };
+      finishListening = finish;
+      const timer = setTimeout(() => { finish('timeout'); active.abort(); }, 20000);
       rec.lang = lang;
       rec.interimResults = true;
       rec.continuous = false;
@@ -89,20 +112,19 @@ export function createSpeech() {
         onInterim?.(finalText + interim);
       };
       rec.onerror = (e) => {
-        if (e.error === 'no-speech' || e.error === 'aborted') return;
-        rec = null;
-        reject(new Error(e.error));
+        finish(e.error === 'no-speech' || e.error === 'aborted' ? '' : e.error);
       };
       rec.onend = () => {
-        rec = null;
-        resolve(finalText.trim());
+        finish('', finalText.trim());
       };
-      rec.start();
+      try { rec.start(); } catch (e) { finish(e.name || 'start-failed'); }
     });
   }
 
   function stopListening() {
-    rec?.abort();
+    const active = rec;
+    finishListening?.('');
+    active?.abort();
   }
 
   return { supported: !!Recognition, speak, stopSpeaking, listen, stopListening };

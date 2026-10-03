@@ -2,13 +2,25 @@
 (() => {
   const F = (window.__fluent = window.__fluent || {});
   let rec = null;
+  let cancel = null;
 
   // Resolves with { text } ('' if nothing was said) or { error: <recognition error code> }.
   F.listen = function listen(lang) {
     return new Promise((resolve) => {
       const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!Recognition) return resolve({ error: 'unsupported' });
-      rec = new Recognition();
+      F.stopListening();
+      const active = rec = new Recognition();
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (rec === active) { rec = null; cancel = null; }
+        resolve(result);
+      };
+      cancel = () => finish({ text: '' });
+      const timer = setTimeout(() => { finish({ error: 'timeout' }); active.abort(); }, 20000);
       rec.lang = lang;
       rec.interimResults = false;
       rec.continuous = false;
@@ -19,21 +31,23 @@
       };
       rec.onerror = (e) => {
         if (e.error !== 'no-speech' && e.error !== 'aborted') error = e.error;
+        finish(error ? { error } : { text: '' });
       };
       rec.onend = () => {
-        rec = null;
-        resolve(error ? { error } : { text: text.trim() });
+        finish(error ? { error } : { text: text.trim() });
       };
       try {
         rec.start();
       } catch (e) {
-        resolve({ error: e.name || 'start-failed' });
+        finish({ error: e.name || 'start-failed' });
       }
     });
   };
 
   F.stopListening = function stopListening() {
-    rec?.abort();
+    const active = rec;
+    cancel?.();
+    active?.abort();
     return { ok: true };
   };
 })();

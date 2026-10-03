@@ -33,6 +33,9 @@ const state = {
   silentRounds: 0,
   micOk: false,
   pendingRescan: false,
+  queue: [],
+  listenToken: 0,
+  session: 0,
 };
 
 const lang = () => LANGUAGES.find((l) => l.code === state.settings.lang) || LANGUAGES[0];
@@ -136,8 +139,8 @@ function render() {
   }
   $('show-tr-label').textContent = p.show_translations;
   // While a private field is open, nothing typed or spoken here should be able to carry its value.
-  $('text').disabled = privateField || state.busy;
-  $('send').disabled = privateField || state.busy;
+  $('text').disabled = privateField;
+  $('send').disabled = privateField;
   // While the assistant is talking the mic button interrupts it, whatever the field.
   $('mic').disabled = !speech.supported || (!state.speaking && (typing || state.mode === 'done'));
   $('mic').title = state.speaking ? 'Tap to interrupt' : typing ? 'The microphone is off while you type this answer' : 'Microphone';
@@ -206,9 +209,8 @@ const ui = {
     if (!state.settings.speak || state.skipSpeech) return;
     state.speaking = true;
     render();
-    await speech.speak(text, lang().speech);
-    state.speaking = false;
-    render();
+    try { await speech.speak(text, lang().speech); }
+    finally { state.speaking = false; render(); }
   },
   prompt(p) {
     state.mode = p.mode;
@@ -220,13 +222,16 @@ const ui = {
   status() {},
   error(e) {
     console.error(e);
-    banner(e?.kind === 'unreachable' ? `${state.phrases.ai_error} (${state.settings.baseUrl})` : String(e?.message || e));
+    const message = e?.kind === 'unreachable' ? `${state.phrases.ai_error} (${state.settings.baseUrl})` : String(e?.message || e);
+    banner(message);
+    bubble('agent', message);
   },
 };
 
 // Runs one step of the conversation, then hands the turn back to the user.
 async function runTurn(fn) {
   if (state.busy) return;
+  const session = state.session;
   state.busy = true;
   render();
   const thinking = bubble('thinking', '…');
@@ -236,10 +241,17 @@ async function runTurn(fn) {
     ui.error(e);
   } finally {
     thinking.remove();
+    if (session !== state.session) return;
     state.busy = false;
     state.speaking = false;
     state.skipSpeech = false;
     render();
+  }
+  if (state.queue.length) {
+    const text = state.queue.shift();
+    return runTurn(() => state.mode === 'type' && state.field?.sensitive
+      ? ui.say(state.phrases.type_private)
+      : state.agent.handleUser(text));
   }
   if (state.pendingRescan) {
     state.pendingRescan = false;
@@ -299,21 +311,43 @@ async function start() {
 }
 
 async function reset() {
+  state.session++;
+  cancelListening();
   speech.stopSpeaking();
   speech.stopListening();
   state.send?.({ type: 'fluent:clear' }).catch(() => {});
-  Object.assign(state, { agent: null, send: null, mode: 'idle', field: null, voiceOn: false, listening: false, speaking: false, skipSpeech: false, phrases: { ...PHRASES } });
+  Object.assign(state, { agent: null, send: null, mode: 'idle', field: null, busy: false, queue: [], pendingRescan: false, pageListen: false, voiceOn: false, listening: false, speaking: false, skipSpeech: false, phrases: { ...PHRASES } });
   banner('');
   render();
 }
 
-function sendText(text) {
+function sendText(text, spoken = false) {
   text = text.trim();
-  if (!text || !state.agent || state.busy) return;
+  if (!text || !state.agent) return false;
+  if (state.mode === 'type' && state.field?.sensitive) {
+    banner(state.phrases.type_private, 'info');
+    return false;
+  }
+  if (!spoken) state.voiceOn = false;
+  state.skipSpeech = true;
   speech.stopSpeaking();
-  if (state.listening) speech.stopListening(); // typed instead of spoken
+  cancelListening();
   bubble('user', text);
+  if (state.busy) {
+    state.queue.push(text);
+    render();
+    return true;
+  }
   runTurn(() => state.agent.handleUser(text));
+  return true;
+}
+
+function cancelListening() {
+  state.listenToken++;
+  speech.stopListening();
+  state.send?.({ type: 'fluent:stop-listen' }).catch(() => {});
+  state.listening = false;
+  $('interim').hidden = true;
 }
 
 // ---------- voice ----------
@@ -322,15 +356,21 @@ function sendText(text) {
 // which is not reliable inside a side panel. Returns '' when it works, otherwise the error name.
 async function micProblem() {
   if (state.micOk) return '';
+  let timer;
+  let expired = false;
   try {
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('no answer'), { name: 'NotAllowedError' })), 3000));
-    const stream = await Promise.race([navigator.mediaDevices.getUserMedia({ audio: true }), timeout]);
+    const timeout = new Promise((_, reject) => { timer = setTimeout(() => { expired = true; reject(Object.assign(new Error('no answer'), { name: 'NotAllowedError' })); }, 3000); });
+    const request = navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      if (expired) stream.getTracks().forEach((t) => t.stop());
+      return stream;
+    });
+    const stream = await Promise.race([request, timeout]);
     stream.getTracks().forEach((t) => t.stop());
     state.micOk = true;
     return '';
   } catch (e) {
     return e.name || 'Error';
-  }
+  } finally { clearTimeout(timer); }
 }
 
 // A side panel cannot show the microphone prompt itself, so a small tab asks once.
@@ -346,6 +386,8 @@ const MIC_HELP = {
   'audio-capture': 'No microphone was found.',
   'language-not-supported': 'Chrome cannot recognise speech in this language.',
   unsupported: 'This browser has no speech recognition.',
+  timeout: 'Speech recognition did not respond. Tap the microphone to try again.',
+  'missing-handler': 'Reload the form tab and Fluent in chrome://extensions, then start again.',
 };
 const micBanner = (where, code) => banner(`Microphone (${where}: ${code}). ${MIC_HELP[code] || ''} You can always type your answers below.`, 'info');
 
@@ -362,6 +404,7 @@ async function recognise() {
     }
   }
   const res = await state.send({ type: 'fluent:listen', lang: lang().speech });
+  if (!res || typeof res.text !== 'string' && !res.error) throw Object.assign(new Error('missing-handler'), { where: 'page' });
   if (res?.error) throw Object.assign(new Error(res.error), { where: 'page' });
   return res?.text || '';
 }
@@ -371,7 +414,9 @@ const MAX_SILENT_ROUNDS = 3; // how many times to keep listening through silence
 // byUser: the user tapped the mic (so it is fine to open the permission tab); otherwise hands-free.
 async function listenOnce(byUser = false) {
   if (state.listening || state.busy || state.mode !== 'listen') return;
+  const token = ++state.listenToken;
   const problem = await micProblem();
+  if (token !== state.listenToken) return;
   if (problem) {
     state.voiceOn = false;
     render();
@@ -386,18 +431,25 @@ async function listenOnce(byUser = false) {
   $('interim').textContent = '';
   render();
   let text = '';
+  let timer;
   try {
-    text = await recognise();
+    text = await Promise.race([recognise(), new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('timeout')), 22000);
+    })]);
   } catch (e) {
+    if (token !== state.listenToken) return;
     state.voiceOn = false;
+    speech.stopListening();
+    state.send?.({ type: 'fluent:stop-listen' }).catch(() => {});
     micBanner(e.where || 'panel', e.message);
-  }
+  } finally { clearTimeout(timer); }
+  if (token !== state.listenToken) return;
   state.listening = false;
   $('interim').hidden = true;
   if (text) {
     state.silentRounds = 0;
     render();
-    return sendText(text);
+    return sendText(text, true);
   }
   // Silence. Keep listening for a while, like a person waiting for an answer, then pause.
   if (state.voiceOn && ++state.silentRounds < MAX_SILENT_ROUNDS) {
@@ -419,8 +471,8 @@ function toggleMic() {
   }
   if (state.listening) {
     state.voiceOn = false;
-    speech.stopListening();
-    state.send?.({ type: 'fluent:stop-listen' }).catch(() => {});
+    cancelListening();
+    render();
     return;
   }
   banner('');
@@ -452,8 +504,7 @@ $('start').addEventListener('click', start);
 $('send-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const text = $('text').value;
-  $('text').value = '';
-  sendText(text);
+  if (sendText(text)) $('text').value = '';
 });
 $('mic').addEventListener('click', toggleMic);
 $('continue').addEventListener('click', () => runTurn(() => state.agent.continueTyped()));
