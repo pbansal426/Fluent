@@ -26,6 +26,12 @@ if [ -z "$OPENROUTER_API_KEY" ]; then
   echo "No key entered, so nothing was started."
   exit 1
 fi
+# Copying a key from a web page can bring invisible characters along. Remove anything that is not a normal visible character.
+CLEANED=$(printf '%s' "$OPENROUTER_API_KEY" | LC_ALL=C tr -cd '\041-\176')
+if [ "$CLEANED" != "$OPENROUTER_API_KEY" ]; then
+  echo "(Removed invisible characters that came along with the pasted key.)"
+  OPENROUTER_API_KEY="$CLEANED"
+fi
 case "$OPENROUTER_API_KEY" in
   sk-or-*) ;;
   *) echo "Note: that does not look like an OpenRouter key (they start with sk-or-). Continuing anyway." ;;

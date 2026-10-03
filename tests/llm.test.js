@@ -77,6 +77,13 @@ test('chatJson retries once on unparseable output', async () => {
   assert.deepEqual(await llm.chatJson({ messages: [] }), { a: 1 });
 });
 
+test('a pasted API key with invisible characters is cleaned before it is sent', async () => {
+  let sent;
+  const llm = createClient({ baseUrl: 'http://x/v1', model: 'm', apiKey: '\u200bsk-or-abc123\u200b ', fetchImpl: async (url, init) => { sent = init.headers.Authorization; return ok({ content: 'hi' }); } });
+  await llm.chat({ messages: [] });
+  assert.equal(sent, 'Bearer sk-or-abc123');
+});
+
 test('one network blip is retried quietly; a second one is reported', async () => {
   let calls = 0;
   const flaky = createClient({ baseUrl: 'http://x/v1', model: 'm', fetchImpl: async () => { calls++; if (calls === 1) throw new TypeError('Failed to fetch'); return ok({ content: 'hola' }); } });

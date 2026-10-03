@@ -73,6 +73,7 @@ export function strictify(format) {
 }
 
 export function createClient({ baseUrl, model, apiKey = '', disableThinking = true, fetchImpl = (...a) => fetch(...a) }) {
+  apiKey = String(apiKey || '').replace(/[^\x21-\x7e]/g, ''); // a pasted key may carry invisible characters
   const root = String(baseUrl || '').replace(/\/+$/, '');
   const headers = { 'Content-Type': 'application/json' };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;

@@ -27,7 +27,7 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const MAX_BODY = 1_000_000;
 
 export function createDemoServer({ root, env = process.env, fetchImpl = (...a) => fetch(...a), now = () => Date.now() } = {}) {
-  const sharedKey = env.OPENROUTER_API_KEY || '';
+  const sharedKey = String(env.OPENROUTER_API_KEY || '').replace(/[^\x21-\x7e]/g, ''); // printable ASCII only
   const sharedModel = env.DEMO_MODEL || 'openai/gpt-4o-mini';
   const maxTokens = Number(env.DEMO_MAX_TOKENS) || 3000;
   const perWindow = Number(env.DEMO_RATE_PER_5MIN) || 80; // requests per visitor per 5 minutes
@@ -81,6 +81,7 @@ export function createDemoServer({ root, env = process.env, fetchImpl = (...a) =
     let payload = ['GET', 'HEAD'].includes(method) ? undefined : body;
 
     // A visitor without a key of their own uses the shared one: limited, pinned to one model, replies capped.
+    if (headers.authorization) headers.authorization = String(headers.authorization).replace(/[^\x20-\x7e]/g, '');
     const ownKey = /^Bearer\s+\S{8,}/.test(String(headers.authorization || ''));
     if (!local && target.hostname === 'openrouter.ai' && !ownKey) {
       if (!sharedKey) return res.writeHead(503).end('No shared key is set up on this server.');

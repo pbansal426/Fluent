@@ -121,6 +121,17 @@ test('the shared key is rate limited per visitor, and a missing key says so', as
   assert.equal((await ask({}, forward('https://openrouter.ai/api/v1/chat/completions', { via: 'tunnel', body: chat() }))).status, 503);
 });
 
+test('a key pasted with invisible characters (a zero-width space from a web page) still works', async () => {
+  calls = [];
+  const env = { OPENROUTER_API_KEY: '\u200bsk-or-REAL-KEY\u00a0\n' };
+  const r = await ask(env, forward('https://openrouter.ai/api/v1/chat/completions', { via: 'tunnel', body: chat() }));
+  assert.equal(r.status, 200);
+  assert.equal(calls.at(-1).init.headers.authorization, 'Bearer sk-or-REAL-KEY');
+  // and a visitor's own key with the same problem is cleaned before it is forwarded
+  const own = await ask(env, forward('https://openrouter.ai/api/v1/chat/completions', { via: 'tunnel', headers: { authorization: 'Bearer sk-or-visitor-key-1234' }, body: chat('x/y', 10) }));
+  assert.equal(own.status, 200);
+});
+
 test('visitors\' conversations are never logged; this machine\'s are', async () => {
   const log = join(root, 'logs', 'fluent.log');
   const before = readFileSync(log, 'utf8');
