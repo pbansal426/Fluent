@@ -67,6 +67,7 @@ main { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
 footer { background: var(--surface); border-top: 1px solid var(--line); padding: 8px 12px 12px; display: grid; gap: 8px; }
 footer[hidden] { display: none; }
 .toggle { font-size: 13px !important; color: var(--muted) !important; }
+label.check[hidden], button.icon[hidden] { display: none !important; }
 #send-form { display: flex; gap: 8px; align-items: center; }
 #text { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
 .mic { width: 48px; height: 48px; border-radius: 50%; padding: 0; flex: none; display: grid; place-items: center; }

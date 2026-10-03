@@ -2,6 +2,27 @@
 
 Updated 2026-10-03 at the owner's request to hand off immediately. Read this first, then `docs/superpowers/specs/2026-10-02-fluent-design.md` and `README.md`. Prefer small, safe changes; deadline is today at 5:15 PM CDT.
 
+## 00. Latest update (2026-10-03 midday, branch `worktree-fluent-task3`) — read this before section 0
+
+Section 0 below is the earlier takeover state; where it says task 3 is outstanding or the follow-ups are uncommitted, **this block supersedes it**. Work lives on branch `worktree-fluent-task3` (worktree `.claude/worktrees/fluent-task3`), **not yet merged into `main`**. To test it in Chrome, load that worktree's `extension/` folder unpacked (or fast-forward `main` first: `git merge --ff-only worktree-fluent-task3` in `~/Dev/Fluent`, after discarding the identical uncommitted copies of the follow-up files there).
+
+Owner direction this session: audience is **non-native speakers** (any form language, auto-detected), simple **6th-grade** language, behave like a patient professional form-filler, usable by a kid; offices could run it on kiosks (QR/phone web app is roadmap, not built); demo domain is **US immigration forms**; "model needs to be smarter"; live mode should keep the mic open for the session unless the user turns live mode off or mutes.
+
+Done and committed on the branch:
+- **Task 3**: `navigate` tool (back, goto, clear, skip_section, readback, remaining), `copy_from` in `fill_fields`, `Agent.redactPrivate` of SSN/EIN/card/9-digit runs before text reaches the model, focus stays on the current field, next field wraps round to anything jumped over. Follow-ups from section 0 (no-form recovery, mic-failure tests) are committed.
+- **Plain language + helping**: all fixed phrases rewritten; prompt requires 6th-grade wording, a help procedure ("help me" explains the current field and where to find it, escalates with `helpCount`), no guessing when the user only describes an answer ("the one starting with G"), single letters count as initials, fill immediately when an answer is stated. Same-language forms now also get simple questions (translation call with `sameLanguage`), but no badges.
+- **Private values typed in the chat box** (masked, show/hide eye button): `Agent.submitPrivate` writes straight to the field; never to the model, history, values or transcript (shows dots). Spoken text can never reach a private field.
+- **Live mode**: `lib/live.js` keeps one mic stream open with echo cancellation; a voice detector (adaptive threshold, `bargeIn` setting off/low/normal/high) stops the assistant when the user talks; the mic button mutes/unmutes; after two silent rounds the assistant asks again ("Are you still there?"). Auto-disables talk-over if it triggers within 700 ms of speech start twice (speaker echo). **Real microphone and real talk-over are unverified**; detector logic is unit-tested, panel flows use doubles.
+- **Form view tab** in the panel: the form as editable rows (private rows masked, never echoed back); `Agent.fieldView()` / `setValue()`.
+- **PDF**: field labels fall back to the PDF's own tooltips (`alternativeText`) when there is no readable caption (USCIS forms), compacted to "Group: 1.B Enter Given Name"; fields reordered top-to-bottom; **multi-page**: when a page is finished the assistant moves to the next page with fields (`F.nextPage`, `fluent:next-page`).
+- Tests: `npm test` 50/50. New deterministic panel scripts: `tests/panel-private.js` (9/9), `tests/panel-formview.js` (6/6), plus `tests/panel-mic-failures.js` (7/7) and `tests/panel-interruption.js` (6/6). New e2e cases in `tests/e2e.html`: `?case=help` (unsure user / "help me" must not fill junk), `?case=i9` (Spanish speaker, real USCIS Form I-9, needs `i-9.pdf` in the repo root: https://www.uscis.gov/sites/default/files/document/forms/i-9.pdf). `tests/pdf-scan.js` dumps how any PDF is seen. Real-model results are in the final report of the session (see below) and must be rerun after any prompt change.
+
+Not done / open:
+- **Model quality**: `google/gemma-4-e4b` still repeats itself on the 3rd–4th help request and is the main quality ceiling. `qwen/qwen3.8-27b` is listed in LM Studio but has not been loaded or tested (shared GPU; owner must say so).
+- Scanned-PDF OCR, iframe scanning, custom (non-`<select>`) dropdowns: not started. Phone/QR web version: roadmap only.
+- Multi-page PDFs: only the page shown is scanned; the assistant now advances automatically, but this was only tested through unit tests and label scans of the I-765 / I-9 / I-130, not a full spoken run across pages.
+- Real mic / talk-over / real Chrome loading of the new build: not verified.
+
 ## 0. Immediate takeover state
 
 The owner requested three tasks, in order. **Tasks 1 and 2 have committed implementations and automated verification. Task 3 has not been implemented.** The owner then requested this immediate handoff; do not mistake it for completion of all requested work.
