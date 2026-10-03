@@ -1,0 +1,42 @@
+* { box-sizing: border-box; }
+body { margin: 0; background: #5b6470; color: #17202b; font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+#bar {
+  position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px;
+  padding: 8px 14px; background: #fff; border-bottom: 1px solid #dbe2ea;
+}
+.brand { font-weight: 700; font-size: 17px; }
+#name { color: #5d6b7a; font-size: 13px; margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pager { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+button, .btn {
+  font: inherit; border: 1px solid #dbe2ea; background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer;
+}
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; font-weight: 600; }
+
+#empty { display: grid; place-items: center; gap: 10px; text-align: center; color: #fff; padding: 18vh 24px; }
+#empty[hidden], #stage[hidden] { display: none; }
+#empty .big { font-size: 64px; }
+body.dragging { outline: 4px dashed #8ab4ff; outline-offset: -10px; }
+
+#stage { padding: 18px; display: flex; justify-content: center; }
+.page { position: relative; background: #fff; box-shadow: 0 2px 14px rgba(0, 0, 0, .35); }
+.page canvas { display: block; }
+.fluentLabelLayer, .page .annotationLayer { position: absolute; inset: 0; }
+.fluentLabelLayer { pointer-events: none; }
+
+/* Invisible copies of the printed captions: scan.js reads them as labels, overlay.js hangs translations on them. */
+.fluent-pdf-label, .fluent-pdf-text { position: absolute; margin: 0; color: transparent; white-space: nowrap; line-height: 1; overflow: visible; }
+
+/* On a PDF there is no room under the caption, so the translation sits on top of it; the toggle shows the original. */
+.fluentLabelLayer .fluent-badge {
+  position: absolute; left: -2px; top: -2px; margin: 0; padding: 1px 3px; border-left-width: 2px; border-radius: 2px;
+  font-size: inherit; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  width: auto; min-width: calc(100% + 4px); max-width: var(--fluent-max, none);
+  background: #e8f2ff; color: #0b4a8f;
+}
+.fluentLabelLayer .fluent-badge.fluent-current { max-width: none; z-index: 5; box-shadow: 0 1px 6px rgba(0, 0, 0, .3); }
+.fluentLabelLayer .fluent-badge .fluent-exp { display: none !important; }
+/* Fields whose label was inferred have no caption to cover: no badge. */
+.annotationLayer .fluent-badge { display: none !important; }
+
+.annotationLayer :is(input, textarea)[data-fluent-current] { outline-offset: 1px; }

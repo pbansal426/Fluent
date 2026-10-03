@@ -10,6 +10,16 @@ Fill out any web form in your own language. Fluent translates the form in place 
 4. Click the Fluent icon to open the side panel, pick a language, press the start button.
 5. First time you tap the microphone, a tab opens asking for permission. Allow it, then tap the mic again.
 
+### PDF forms (Spanish W-2 demo)
+
+Fillable PDFs open in Fluent's own viewer, because Chrome's built-in PDF viewer cannot be scripted.
+
+1. `npm run demo`, then open <http://localhost:8765/fw2_es.pdf> (the Spanish W-2 in the repo root).
+2. Open the Fluent panel, pick **English**, press the start button. The tab switches to the Fluent viewer on the first fillable page (page 3), labels turn into English, and the assistant starts asking.
+3. **Download filled PDF** saves a copy with your answers in it.
+
+For a PDF on disk, drop it onto the viewer tab or use **Open PDF** (or turn on "Allow access to file URLs" for Fluent in `chrome://extensions` and open the `file://` link directly). Scanned PDFs without real form fields are not supported.
+
 Any OpenAI-compatible endpoint works: open ⚙ in the panel and change the URL, model and API key.
 
 ## Test
@@ -18,11 +28,19 @@ Any OpenAI-compatible endpoint works: open ⚙ in the panel and change the URL, 
 npm test                 # unit tests for extension/lib
 npm run demo             # serve the repo, then:
 node tests/run-harness.mjs  # page-side scripts against the demo form in headless Chrome
+
+# with LM Studio running (these call the real model):
+node tests/run-harness.mjs "http://127.0.0.1:8765/tests/e2e.html"            # Spanish speaker, English web form
+node tests/run-harness.mjs "http://127.0.0.1:8765/tests/e2e.html?case=w2"    # English speaker, Spanish W-2 PDF
+node tests/run-harness.mjs "http://127.0.0.1:8765/extension/pdf/viewer.html?file=/fw2_es.pdf" shot.png @tests/pdf-check.js
 ```
+
+`tests/panel-sim.html` runs the real side panel next to a form in an ordinary tab (chrome.* stubbed).
 
 ## Layout
 
 - `extension/content/` — runs in the web page: find fields, show translations, fill values.
 - `extension/lib/` — AI client, conversation logic, privacy rules, speech.
 - `extension/panel/` — the side panel UI.
+- `extension/pdf/` — PDF viewer (pdf.js, vendored in `lib/`) and position-based label matching.
 - `docs/superpowers/specs/` — design.

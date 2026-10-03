@@ -5,8 +5,13 @@ const NUM = '(?:no\\.?|num(?:ber)?|#)';
 
 const SENSITIVE_PATTERNS = [
   /\bssn\b/,
-  /social\s*security/,
-  /passport/,
+  // The number itself, not "social security wages" or "social security tax withheld".
+  new RegExp(`social\\s*security\\s*${NUM}`),
+  /n[uú]m(?:ero)?\.?\s*de\s*seguro\s*social/,
+  /passport|pasaporte/,
+  /licencia\s*de\s*conducir/,
+  /contrase[ñn]a/,
+  /n[uú]m(?:ero)?\.?\s*de\s*(?:tarjeta|cuenta|identificaci[oó]n)/,
   new RegExp(`driver'?s?\\s*licen[cs]e`),
   new RegExp(`licen[cs]e\\s*${NUM}`),
   new RegExp(`\\bcard\\s*${NUM}`),

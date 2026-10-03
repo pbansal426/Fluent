@@ -7,6 +7,11 @@ const field = (over) => ({ kind: 'text', inputType: 'text', label: '', name: '',
 test('flags identity and financial numbers by label', () => {
   for (const label of [
     'Social Security Number',
+    "a Employee's social security number",
+    'a Núm. de seguro social del empleado',
+    'b Núm. de identificación del empleador (EIN)',
+    'Número de pasaporte',
+    'Contraseña',
     'SSN',
     'Passport number',
     "Driver's License Number",
@@ -33,7 +38,22 @@ test('flags by name, id, type and autocomplete even when the label is vague', ()
 });
 
 test('leaves ordinary fields to voice', () => {
-  for (const label of ['First name', 'Phone number', 'Date of birth', 'Street address', 'Occupation', 'Shipping option', 'Opinion', 'Email address', 'Spinal injury?']) {
+  for (const label of [
+    'First name',
+    'Phone number',
+    'Date of birth',
+    'Street address',
+    'Occupation',
+    'Shipping option',
+    'Opinion',
+    'Email address',
+    'Spinal injury?',
+    '3 Social security wages',
+    '4 Social security tax withheld',
+    '3 Salarios para el seguro social',
+    '4 Impuesto del seguro social retenido',
+    'e Primer nombre e inicial',
+  ]) {
     const c = classify(field({ label }));
     assert.equal(c.sensitive, false, label);
     assert.equal(c.long, false, label);

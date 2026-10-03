@@ -1,10 +1,13 @@
 <!doctype html>
-<!-- End-to-end check with the real model: the agent, the page scripts and the demo form, minus speech
-     and chrome.* APIs. Run: node tests/run-harness.mjs http://127.0.0.1:8765/tests/e2e.html out.png
-     Query: ?lang=Spanish&model=google/gemma-4-e4b&base=http://localhost:1234/v1 -->
+<!-- End-to-end check with the real model: the agent, the page scripts and a real form, minus speech
+     and chrome.* APIs. Two cases:
+       node tests/run-harness.mjs "http://127.0.0.1:8765/tests/e2e.html" out.png            Spanish speaker, English web form
+       node tests/run-harness.mjs "http://127.0.0.1:8765/tests/e2e.html?case=w2" out.png    English speaker, Spanish W-2 PDF
+     (the w2 case needs fw2_es.pdf in the repo root, which is not in git)
+     Other query options: &model=google/gemma-4-e4b&base=http://localhost:1234/v1 -->
 <meta charset="utf-8">
 <title>Fluent end-to-end</title>
-<iframe id="page" src="../demo/intake.html" style="width:1000px;height:2300px;border:0"></iframe>
+<iframe id="page" style="width:1100px;height:2300px;border:0"></iframe>
 <pre id="out">running</pre>
 <script type="module">
 import { createClient } from '../extension/lib/llm.js';
@@ -12,40 +15,92 @@ import { Agent } from '../extension/lib/agent.js';
 import { translatePhrases } from '../extension/lib/prompts.js';
 
 const q = new URLSearchParams(location.search);
-const userLang = q.get('lang') || 'Spanish';
 const SSN = '123-45-6789';
 
-// What a Spanish speaker might say for each field (keyed by the start of the English label).
-const ANSWERS = {
-  'Legal first name': ['Me llamo María Elena López García y nací el 3 de marzo de 1998'],
-  'Legal last name': ['López García'],
-  'Date of birth': ['el 3 de marzo de 1998'],
-  'Sex assigned': ['mujer'],
-  'Marital status': ['estoy casada'],
-  'Mobile phone': ['217 555 0198'],
-  'Email address': ['maria punto lopez arroba gmail punto com'],
-  'Street address': ['742 calle Green, apartamento 3'],
-  City: ['Urbana'],
-  Occupation: ['soy cocinera en un restaurante'],
-  'Preferred language': ['español'],
-  'Interpreter needed': ['sí, por favor'],
-  'Insurance provider': ['no tengo seguro'],
-  'Full name': ['mi esposo, Carlos López, y su teléfono es 217 555 0147'],
-  'Relationship to patient': ['es mi esposo'],
-  'Phone number': ['217 555 0147'],
-  'Do you have any allergies': ['sí, soy alérgica a la penicilina'],
-  'If yes, list': ['penicilina'],
-  'Do you currently smoke': ['nunca he fumado'],
-  'Current medications': ['¿qué significa eso?', 'no tomo ninguno'],
-  'I have read': ['sí, estoy de acuerdo'],
-};
-const TYPED = {
-  'Social Security Number': { value: SSN },
-  'Member ID number': { value: '' },
-  "Reason for today's visit": { value: 'Tengo dolor de cabeza y fiebre desde hace tres días.', translate: true },
+// What the user says for each field (keyed by the start of the form's own label), what they type into
+// private or long fields, and what the finished form must look like.
+const CASES = {
+  intake: {
+    src: '../demo/intake.html',
+    userLang: 'Spanish',
+    skip: 'saltar, no lo sé',
+    answers: {
+      'Legal first name': ['Me llamo María Elena López García y nací el 3 de marzo de 1998'],
+      'Legal last name': ['López García'],
+      'Date of birth': ['el 3 de marzo de 1998'],
+      'Sex assigned': ['mujer'],
+      'Marital status': ['estoy casada'],
+      'Mobile phone': ['217 555 0198'],
+      'Email address': ['maria punto lopez arroba gmail punto com'],
+      'Street address': ['742 calle Green, apartamento 3'],
+      City: ['Urbana'],
+      Occupation: ['soy cocinera en un restaurante'],
+      'Preferred language': ['español'],
+      'Interpreter needed': ['sí, por favor'],
+      'Insurance provider': ['no tengo seguro'],
+      'Full name': ['mi esposo, Carlos López, y su teléfono es 217 555 0147'],
+      'Relationship to patient': ['es mi esposo'],
+      'Phone number': ['217 555 0147'],
+      'Do you have any allergies': ['sí, soy alérgica a la penicilina'],
+      'If yes, list': ['penicilina'],
+      'Do you currently smoke': ['nunca he fumado'],
+      'Current medications': ['¿qué significa eso?', 'no tomo ninguno'],
+      'I have read': ['sí, estoy de acuerdo'],
+    },
+    typed: {
+      'Social Security Number': { value: SSN },
+      'Member ID number': { value: '' },
+      "Reason for today's visit": { value: 'Tengo dolor de cabeza y fiebre desde hace tres días.', translate: true },
+    },
+    checks: (v) => ({
+      'ssn typed on page': v('Social Security Number') === SSN,
+      date: v('Date of birth') === '1998-03-03',
+      'select translated': v('Marital status') === 'Married' && v('Sex assigned') === 'Female',
+      consent: v('I have read') === 'true',
+      'form language detected': (formLang) => /english/i.test(formLang),
+    }),
+  },
+  w2: {
+    src: '../extension/pdf/viewer.html?file=/fw2_es.pdf',
+    userLang: 'English',
+    skip: 'skip this one',
+    answers: {
+      'e Primer nombre': ['My name is Maria E. Lopez'],
+      Apellido: ['Lopez'],
+      '1 Salarios': ['my wages were 52000 dollars and the federal income tax withheld was 6100'],
+      '2 Impuesto federal': ['6100'],
+      '3 Salarios para': ['what does this box mean?', '52000'],
+      '4 Impuesto del seguro': ['3224'],
+      '5 Salarios y propinas': ['52000'],
+      '6 Impuesto de Medicare': ['754'],
+      'Empleado estatutario': ['no'],
+      'Plan de jubilación': ['yes'],
+      '15 Estado': ['Illinois'],
+      '16 Salarios estatales': ['52000'],
+      '17 Impuesto estatal': ['2574'],
+    },
+    typed: {
+      'a Núm. de seguro social': { value: SSN },
+      'b Núm. de identificación': { value: '12-3456789' },
+      'c Nombre, dirección': { value: 'Lakeside Family Clinic\n1420 W Harbor St\nChampaign, IL 61820' },
+      'f Dirección y código postal': { value: '742 Green St Apt 3\nUrbana, IL 61801' },
+    },
+    checks: (v, typedLabels) => ({
+      'ssn typed on page': v('a Núm. de seguro social') === SSN,
+      'spanish ssn and ein treated as private': typedLabels.some((l) => l.startsWith('a Núm.')) && typedLabels.some((l) => l.startsWith('b Núm.')),
+      'names from one sentence': /maria/i.test(v('e Primer nombre')) && /lopez/i.test(v('Apellido')),
+      'two boxes from one sentence': /52,?000/.test(v('1 Salarios')) && /6,?100/.test(v('2 Impuesto federal')),
+      'social security wages spoken, not typed': /52,?000/.test(v('3 Salarios para')) && !typedLabels.some((l) => l.startsWith('3 ')),
+      checkboxes: v('Empleado estatutario') === '' && v('Plan de jubilación') === 'true',
+      'form language detected': (formLang) => /spanish/i.test(formLang),
+    }),
+  },
 };
 
+const testCase = CASES[q.get('case') || 'intake'];
+const userLang = q.get('lang') || testCase.userLang;
 const frame = document.getElementById('page');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const load = (doc, src) => new Promise((resolve, reject) => {
   const s = doc.createElement('script');
   s.src = src; s.onload = resolve; s.onerror = reject;
@@ -54,10 +109,12 @@ const load = (doc, src) => new Promise((resolve, reject) => {
 const find = (map, label) => Object.entries(map).find(([k]) => label.startsWith(k))?.[1];
 
 async function run() {
-  const out = { lang: userLang, transcript: [], turns: [], errors: [] };
+  const out = { case: q.get('case') || 'intake', lang: userLang, transcript: [], turns: [], errors: [] };
   const doc = frame.contentDocument;
-  for (const f of ['scan', 'overlay', 'fill']) await load(doc, `../extension/content/${f}.js`);
-  const F = frame.contentWindow.__fluent;
+  const win = frame.contentWindow;
+  if (!win.__fluent?.scan) for (const f of ['scan', 'overlay', 'fill']) await load(doc, `../extension/content/${f}.js`);
+  const F = win.__fluent;
+  for (let i = 0; i < 100 && F.pdfReady === false; i++) await sleep(200); // the PDF viewer needs time to draw
   const page = {
     scan: async () => F.scan(), apply: async (t) => F.apply(t), highlight: async (id) => F.highlight(id),
     focus: async (id) => F.focus(id), fill: async (id, v) => F.fill(id, v), read: async (id) => F.read(id),
@@ -79,7 +136,6 @@ async function run() {
   let t0 = performance.now();
   const phrases = await translatePhrases(llm, userLang);
   out.phrasesMs = Math.round(performance.now() - t0);
-  out.phrasesTranslated = phrases.greeting !== undefined && !/^Hello/.test(phrases.greeting);
 
   const agent = new Agent({ llm, page, ui, userLang, phrases });
   t0 = performance.now();
@@ -87,13 +143,16 @@ async function run() {
   out.firstQuestionMs = Math.round(performance.now() - t0);
 
   const used = {};
-  for (let step = 0; step < 45 && agent.mode !== 'done' && agent.current; step++) {
+  const typedLabels = [];
+  for (let step = 0; step < 90 && agent.mode !== 'done' && agent.current; step++) {
     const field = agent.current;
     console.log(`step ${step}: ${agent.mode} "${field.label}"`);
     if (agent.mode === 'type') {
-      const typed = find(TYPED, field.label) || { value: '' };
+      const typed = find(testCase.typed, field.label) || { value: '' };
       const el = doc.querySelector(`[data-fluent-id="${field.id}"]`);
       el.value = typed.value;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      typedLabels.push(field.label);
       out.transcript.push(`USER TYPES in "${field.label}": ${field.sensitive ? '(private)' : typed.value}`);
       if (typed.translate) {
         await agent.translateTyped();
@@ -102,9 +161,9 @@ async function run() {
       await agent.continueTyped();
       continue;
     }
-    const answers = find(ANSWERS, field.label) || [];
+    const answers = find(testCase.answers, field.label) || [];
     const n = (used[field.id] = (used[field.id] || 0) + 1);
-    const text = answers[n - 1] || 'saltar, no lo sé';
+    const text = answers[n - 1] || testCase.skip;
     out.transcript.push(`USER: ${text}`);
     t0 = performance.now();
     await agent.handleUser(text);
@@ -112,25 +171,27 @@ async function run() {
   }
   await agent.translating;
 
-  out.form = Object.fromEntries(new FormData(doc.getElementById('intake')));
+  // Final value of each field, read from the page itself.
+  const value = (labelStart) => {
+    const field = agent.fields.find((f) => f.label.startsWith(labelStart));
+    const el = field && doc.querySelector(`[data-fluent-id="${field.id}"]`);
+    if (!el) return undefined;
+    if (el.type === 'checkbox') return el.checked ? 'true' : '';
+    if (el.type === 'radio') return doc.querySelector(`input[name="${el.name}"]:checked`)?.value || '';
+    return el.tagName === 'SELECT' ? el.value : el.value;
+  };
+  out.form = Object.fromEntries(agent.fields.map((f) => [f.label, f.sensitive ? '(private)' : value(f.label)]).filter(([, v]) => v));
   out.mode = agent.mode;
   out.formLang = agent.formLang;
+  out.fieldCount = agent.fields.length;
   out.badges = doc.querySelectorAll('[data-fluent-badge]').length;
-  out.turnMs = { median: [...out.turns].sort((a, b) => a - b)[Math.floor(out.turns.length / 2)], max: Math.max(...out.turns) };
-  const checks = {
-    'finished': agent.mode === 'done',
-    'ssn typed on page': out.form.ssn === SSN,
-    'ssn never sent to model': !sent.some((s) => s.includes(SSN)),
-    'date': out.form.dob === '1998-03-03',
-    'select translated': out.form.marital_status === 'Married' && out.form.sex === 'Female',
-    'radio': out.form.allergies === 'yes' && out.form.tobacco === 'never',
-    'consent': out.form.consent === 'on',
-    'no errors': out.errors.length === 0,
-  };
+  const sorted = [...out.turns].sort((a, b) => a - b);
+  out.turnMs = { median: sorted[Math.floor(sorted.length / 2)], max: sorted.at(-1) };
+
+  const checks = { finished: agent.mode === 'done', 'ssn never sent to model': !sent.some((s) => s.includes(SSN)), 'no errors': out.errors.length === 0 };
+  for (const [name, result] of Object.entries(testCase.checks(value, typedLabels))) checks[name] = typeof result === 'function' ? result(agent.formLang) : result;
   out.checks = checks;
-  const passed = Object.values(checks).filter(Boolean).length;
-  out.summary = `${passed}/${Object.keys(checks).length} passed`;
-  out.form.ssn = out.form.ssn && '(redacted)';
+  out.summary = `${Object.values(checks).filter(Boolean).length}/${Object.keys(checks).length} passed`;
   return out;
 }
 
@@ -139,7 +200,6 @@ async function main() {
   try { out = await run(); } catch (e) { out = { error: String(e?.stack || e), summary: '0/1 passed' }; }
   document.getElementById('out').textContent = JSON.stringify(out, null, 1);
 }
-// Module scripts run late: the iframe may already have loaded.
-if (frame.contentDocument?.readyState === 'complete' && frame.contentWindow.location.href !== 'about:blank') main();
-else frame.addEventListener('load', main, { once: true });
+frame.addEventListener('load', main, { once: true });
+frame.src = testCase.src;
 </script>

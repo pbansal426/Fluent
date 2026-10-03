@@ -138,7 +138,7 @@
     const labelNodes = new Set();
     const seenRadioGroups = new Set();
     const controls = [...document.querySelectorAll('input,select,textarea')].filter(
-      (el) => !SKIP_TYPES.has(el.type) && !el.disabled && !el.readOnly && visible(el)
+      (el) => !SKIP_TYPES.has(el.type) && !el.disabled && !el.readOnly && !('fluentSkip' in el.dataset) && visible(el)
     );
 
     for (const el of controls) {
@@ -200,7 +200,7 @@
     const candidates = scope.querySelectorAll('h1,h2,h3,h4,legend,p,li,small,button,[type="submit"]');
     for (const el of candidates) {
       if (out.length >= 40) break;
-      if (labelNodes.has(el) || el.closest('[data-fluent-badge]') || !el.getClientRects().length) continue;
+      if (labelNodes.has(el) || el.closest('[data-fluent-badge],[data-fluent-ignore]') || !el.getClientRects().length) continue;
       if (el.tagName === 'INPUT') continue;
       if (el.querySelector('input,select,textarea,p,li')) continue;
       const text = textOf(el) || (el.tagName === 'BUTTON' ? clean(el.textContent) : '');

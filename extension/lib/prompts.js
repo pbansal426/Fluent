@@ -65,8 +65,8 @@ export const TOOLS = [
   },
 ];
 
-export function turnSystemPrompt({ userLang, formLang, current, fields, history = [] }) {
-  return `You are Fluent, a friendly assistant helping a person who speaks ${userLang} fill out a form written in ${formLang}. They may not be able to read ${formLang}.
+export function turnSystemPrompt({ userLang, formLang, current, fields, history = [], context = '' }) {
+  return `You are Fluent, a friendly assistant helping a person who speaks ${userLang} fill out a form written in ${formLang}. They may not be able to read ${formLang}.${context ? `\nThe form: ${context}` : ''}
 
 You get the form's fields as JSON and the field currently being asked about. The user's message is their spoken or typed reply.
 
@@ -79,7 +79,7 @@ Rules:
 - If the user corrects an earlier answer, call fill_fields again for that field.
 - If the user does not have it, does not know, or wants to skip, call skip_field.
 - Fields with "private": true must be typed by the user. Never fill them and never ask for their value.
-- If the user asks a question or you need clarification, call ask_user with a short, simple reply in ${userLang}: one or two sentences, no markdown.
+- If the user asks a question or you need clarification, call ask_user with a short, simple reply in ${userLang}: one or two sentences, no markdown. When they ask what a field means, explain what it is for and what people usually put there; do not just repeat its name.
 - Always call a tool.
 
 Current field: ${current ? `${current.id} ("${current.label}")` : 'none'}
@@ -87,13 +87,14 @@ Form fields:
 ${JSON.stringify(fields)}${history.length ? `\n\nWhat happened just before (oldest first):\n${history.join('\n')}` : ''}`;
 }
 
-export function translateFieldsPrompt(userLang) {
-  return `You translate web form fields for a person who speaks ${userLang}.
+export function translateFieldsPrompt(userLang, context = '') {
+  return `You translate form fields for a person who speaks ${userLang}.${context ? `\nThe form: ${context}` : ''}
 For each field return:
-- "label": the field's label translated into ${userLang}.
+- "label": the field's label translated into ${userLang}. Always translate it, never leave it in the form's language; keep a leading box number or letter ("12a", "b").
 - "explanation": ONE short, simple sentence in ${userLang} saying what to enter, written for someone with little schooling.
 - "options": every option translated into ${userLang}, same order and same count; an empty array if the field has none.
 - "section": the field's section name translated into ${userLang}; an empty string if it has none.
+- "english": the field's label in English.
 Also return "form_language": the English name of the language the form itself is written in.
 Return JSON only.`;
 }
@@ -117,8 +118,9 @@ export const TRANSLATE_FIELDS_SCHEMA = {
               explanation: { type: 'string' },
               options: { type: 'array', items: { type: 'string' } },
               section: { type: 'string' },
+              english: { type: 'string' },
             },
-            required: ['id', 'label', 'explanation', 'options', 'section'],
+            required: ['id', 'label', 'explanation', 'options', 'section', 'english'],
           },
         },
       },

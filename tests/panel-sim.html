@@ -10,11 +10,13 @@
   #page { flex: 1; border: 0; background: #fff; }
   #panel { width: 400px; border: 0; border-left: 1px solid #555; }
 </style>
-<iframe id="page" src="../demo/intake.html"></iframe>
+<iframe id="page"></iframe>
 <iframe id="panel"></iframe>
 <script>
+  // ?page=<url of the form>&lang=<code>   e.g. ?page=/fw2_es.pdf&lang=en  (a PDF is reopened in Fluent's viewer)
   const q = new URLSearchParams(location.search);
   window.SIM_SETTINGS = { lang: q.get('lang') || 'es' };
+  document.getElementById('page').src = q.get('page') || '../demo/intake.html';
   fetch('../extension/panel/panel.html')
     .then((r) => r.text())
     .then((html) => {

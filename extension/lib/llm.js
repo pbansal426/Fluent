@@ -32,6 +32,31 @@ export function parseJsonLoose(text) {
   return null;
 }
 
+// Local models sometimes write a tool call into the text instead of the tool_calls field, in their
+// own notation: fill_fields{values:[{field_id:<|"|>f5<|"|>,value:<|"|>Maria<|"|>}]}
+export function parseTextToolCalls(content, names) {
+  const calls = [];
+  for (const name of names) {
+    const at = content.indexOf(name);
+    if (at < 0) continue;
+    const start = content.indexOf('{', at);
+    if (start < 0) continue;
+    // Try each closing brace from the end, as plain JSON first, then with bare keys quoted.
+    let args = null;
+    for (let end = content.lastIndexOf('}'); end > start && !args; end = content.lastIndexOf('}', end - 1)) {
+      const body = content.slice(start, end + 1).replaceAll('<|"|>', '"');
+      for (const candidate of [body, body.replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":')]) {
+        try {
+          args = JSON.parse(candidate);
+          break;
+        } catch {}
+      }
+    }
+    if (args) calls.push({ name, args: args.arguments || args.parameters || args });
+  }
+  return calls;
+}
+
 export function createClient({ baseUrl, model, apiKey = '', disableThinking = true, fetchImpl = (...a) => fetch(...a) }) {
   const root = String(baseUrl || '').replace(/\/+$/, '');
   const headers = { 'Content-Type': 'application/json' };
@@ -73,7 +98,15 @@ export function createClient({ baseUrl, model, apiKey = '', disableThinking = tr
         const toolCalls = (msg.tool_calls || [])
           .map((c) => ({ name: c.function?.name, args: parseJsonLoose(c.function?.arguments) }))
           .filter((c) => c.name && c.args);
-        return { content: stripThink(msg.content), toolCalls };
+        const content = stripThink(msg.content);
+        if (tools && !toolCalls.length && content) {
+          const names = tools.map((t) => t.function.name);
+          const fromText = parseTextToolCalls(content, names);
+          if (fromText.length) return { content: '', toolCalls: fromText };
+          // Tool-call debris that could not be read must not be shown or spoken to the user.
+          if (names.some((n) => content.includes(n)) || content.includes('<|')) return { content: '', toolCalls: [] };
+        }
+        return { content, toolCalls };
       } catch (e) {
         // Not every server knows every optional parameter: drop one and try again.
         const droppable = Object.keys(optional).find((k) => body[k] !== undefined);

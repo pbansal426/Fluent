@@ -147,8 +147,35 @@ async function ensureInjected(tabId) {
   await chrome.scripting.executeScript({ target: { tabId }, files: CONTENT_FILES });
 }
 
-function bridge(tabId) {
-  const send = (msg) => chrome.tabs.sendMessage(tabId, msg);
+const VIEWER_URL = chrome.runtime.getURL('pdf/viewer.html');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Returns a function that sends messages to the form in `tab`, or null if Fluent cannot work there.
+// Web pages get the content scripts injected. PDFs are reopened in Fluent's own viewer (an extension
+// page, reached with runtime messages), because Chrome's built-in PDF viewer cannot be scripted.
+async function connect(tab) {
+  const inViewer = tab.url?.startsWith(VIEWER_URL);
+  if (inViewer || /\.pdf($|[?#])/i.test(tab.url || '')) {
+    if (!inViewer) await chrome.tabs.update(tab.id, { url: `${VIEWER_URL}?file=${encodeURIComponent(tab.url)}` });
+    const send = (msg) => chrome.runtime.sendMessage({ ...msg, viewerTab: tab.id });
+    for (let i = 0; i < 60; i++) {
+      const pong = await send({ type: 'fluent:ping' }).catch(() => null);
+      if (pong?.ready) return send;
+      await sleep(250);
+    }
+    banner('Open the PDF in the Fluent viewer tab (drop the file there), then press the button again.', 'info');
+    return null;
+  }
+  try {
+    await ensureInjected(tab.id);
+  } catch {
+    banner('Fluent cannot run on this page. Open a web page or a PDF with a form.');
+    return null;
+  }
+  return (msg) => chrome.tabs.sendMessage(tab.id, msg);
+}
+
+function bridge(send) {
   return {
     scan: () => send({ type: 'fluent:scan' }),
     apply: (translations) => send({ type: 'fluent:apply', translations }),
@@ -232,14 +259,12 @@ async function start() {
   try {
     await llm.listModels(); // fail early, before touching the page
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    try {
-      await ensureInjected(tab.id);
-    } catch {
-      return banner('Fluent cannot run on this page. Open a normal web page with a form.');
-    }
+    const send = await connect(tab);
+    if (!send) return;
     state.tabId = tab.id;
+    state.send = send;
     state.phrases = await phrasesFor(llm);
-    state.agent = new Agent({ llm, page: bridge(tab.id), ui, userLang: lang().name, phrases: state.phrases });
+    state.agent = new Agent({ llm, page: bridge(send), ui, userLang: lang().name, phrases: state.phrases });
     $('transcript').replaceChildren();
     render();
   } catch (e) {
@@ -253,8 +278,8 @@ async function start() {
 async function reset() {
   speech.stopSpeaking();
   speech.stopListening();
-  if (state.tabId) chrome.tabs.sendMessage(state.tabId, { type: 'fluent:clear' }).catch(() => {});
-  Object.assign(state, { agent: null, mode: 'idle', field: null, voiceOn: false, listening: false, phrases: { ...PHRASES } });
+  state.send?.({ type: 'fluent:clear' }).catch(() => {});
+  Object.assign(state, { agent: null, send: null, mode: 'idle', field: null, voiceOn: false, listening: false, phrases: { ...PHRASES } });
   banner('');
   render();
 }
@@ -347,7 +372,7 @@ $('continue').addEventListener('click', () => runTurn(() => state.agent.continue
 $('skip').addEventListener('click', () => runTurn(() => state.agent.skipCurrent()));
 $('translate').addEventListener('click', () => runTurn(() => state.agent.translateTyped()));
 $('show-tr').addEventListener('change', (e) => {
-  if (state.tabId) chrome.tabs.sendMessage(state.tabId, { type: 'fluent:visible', show: e.target.checked }).catch(() => {});
+  state.send?.({ type: 'fluent:visible', show: e.target.checked }).catch(() => {});
 });
 
 chrome.runtime.onMessage.addListener((msg, sender) => {

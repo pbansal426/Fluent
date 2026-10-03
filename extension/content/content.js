@@ -5,7 +5,8 @@
   F.routerLoaded = true;
 
   const handlers = {
-    'fluent:ping': () => ({ ok: true }),
+    // In Fluent's PDF viewer the page is only ready once the PDF has been drawn.
+    'fluent:ping': () => ({ ok: true, ready: F.pdfReady !== false }),
     'fluent:scan': () => F.scan(),
     'fluent:apply': (m) => F.apply(m.translations),
     'fluent:visible': (m) => F.setVisible(m.show),
@@ -19,6 +20,8 @@
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const handler = handlers[msg?.type];
     if (!handler) return;
+    // Messages to the PDF viewer are broadcast to every extension page; only the addressed tab answers.
+    if ('viewerTab' in msg ? msg.viewerTab !== F.viewerTabId : F.viewerTabId != null) return;
     try {
       sendResponse(handler(msg));
     } catch (e) {

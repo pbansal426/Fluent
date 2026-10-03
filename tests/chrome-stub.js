@@ -8,7 +8,7 @@
   const routes = {
     'fluent:ping': () => {
       if (!F()?.scan) throw new Error('not injected');
-      return { ok: true };
+      return { ok: true, ready: F().pdfReady !== false };
     },
     'fluent:scan': () => F().scan(),
     'fluent:apply': (m) => F().apply(m.translations),
@@ -29,7 +29,8 @@
       },
     },
     tabs: {
-      query: async () => [{ id: 1 }],
+      query: async () => [{ id: 1, url: pageFrame().contentWindow.location.href }],
+      update: async (_tabId, { url }) => void (pageFrame().src = url),
       sendMessage: async (_tabId, msg) => routes[msg.type](msg),
       create: ({ url }) => console.log('would open tab', url),
       onUpdated: noopEvent,
@@ -48,6 +49,11 @@
         }
       },
     },
-    runtime: { getURL: (p) => `/extension/${p}`, onMessage: noopEvent, sendMessage: async () => {} },
+    runtime: {
+      getURL: (p) => `${window.parent.location.origin}/extension/${p}`, // this frame is srcdoc: no origin of its own
+      onMessage: noopEvent,
+      // The panel reaches Fluent's PDF viewer (an extension page) with runtime messages.
+      sendMessage: async (msg) => (routes[msg.type] ? routes[msg.type](msg) : undefined),
+    },
   };
 })();

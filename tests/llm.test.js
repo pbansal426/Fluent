@@ -34,6 +34,21 @@ test('chat returns parsed tool calls and sends reasoning_effort none', async () 
   assert.deepEqual(res.toolCalls, [{ name: 'fill_fields', args: { values: [{ field_id: 'f1', value: 'Ana' }] } }]);
 });
 
+test('tool calls written into the text are recovered, debris is never returned as speech', async () => {
+  const tools = [{ function: { name: 'fill_fields' } }, { function: { name: 'ask_user' } }];
+  const reply = (content) => createClient({ baseUrl: 'http://x/v1', model: 'm', fetchImpl: async () => ok({ content }) }).chat({ messages: [], tools });
+
+  const leaked = await reply('fill_fields{values:[{field_id:<|"|>f5<|"|>,value:<|"|>Maria<|"|>},{field_id:<|"|>f6<|"|>,value:<|"|>Lopez<|"|>}]}');
+  assert.equal(leaked.content, '');
+  assert.deepEqual(leaked.toolCalls, [{ name: 'fill_fields', args: { values: [{ field_id: 'f5', value: 'Maria' }, { field_id: 'f6', value: 'Lopez' }] } }]);
+
+  const json = await reply('{"name": "ask_user", "arguments": {"message": "Which state?"}}');
+  assert.deepEqual(json.toolCalls, [{ name: 'ask_user', args: { message: 'Which state?' } }]);
+
+  assert.deepEqual(await reply('<|tool_call|>fill_fields{broken'), { content: '', toolCalls: [] });
+  assert.equal((await reply('It is your legal first name.')).content, 'It is your legal first name.');
+});
+
 test('drops parameters the server rejects, and remembers', async () => {
   const bodies = [];
   const llm = createClient({

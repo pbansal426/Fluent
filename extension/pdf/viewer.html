@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fluent PDF</title>
+<link rel="stylesheet" href="lib/pdf_viewer.css">
+<link rel="stylesheet" href="viewer.css">
+</head>
+<body>
+<header id="bar" data-fluent-ignore>
+  <div class="brand">Fluent</div>
+  <div id="name"></div>
+  <div class="pager">
+    <button id="prev" aria-label="Previous page">‹</button>
+    <span id="pageinfo"></span>
+    <button id="next" aria-label="Next page">›</button>
+  </div>
+  <label class="btn">Open PDF<input id="file" type="file" accept="application/pdf" hidden></label>
+  <button id="download" class="primary" disabled>Download filled PDF</button>
+</header>
+
+<div id="empty" data-fluent-ignore>
+  <div class="big">📄</div>
+  <div id="empty-text">Drop a PDF form here, or use "Open PDF".</div>
+</div>
+
+<main id="stage" hidden>
+  <div id="page" class="page">
+    <canvas id="canvas"></canvas>
+    <div id="labels" class="fluentLabelLayer"></div>
+    <div id="annotations" class="annotationLayer"></div>
+  </div>
+</main>
+
+<script src="../content/scan.js"></script>
+<script src="../content/overlay.js"></script>
+<script src="../content/fill.js"></script>
+<script src="../content/content.js"></script>
+<script type="module" src="viewer.js"></script>
+</body>
+</html>

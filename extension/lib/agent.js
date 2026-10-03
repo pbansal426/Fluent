@@ -55,6 +55,8 @@ export class Agent {
       await this.ui.say(this.phrases.no_form);
       return;
     }
+    // What kind of form this is, so the model can translate and explain in context.
+    this.context = [scan.title, ...(scan.texts || []).slice(0, 3).map((t) => t.text)].filter(Boolean).join(' · ').slice(0, 300);
     for (const f of this.fields) {
       if (!f.value) continue;
       this.filled.add(f.id);
@@ -112,7 +114,7 @@ export class Agent {
     try {
       out = await this.llm.chatJson({
         messages: [
-          { role: 'system', content: translateFieldsPrompt(this.userLang) },
+          { role: 'system', content: translateFieldsPrompt(this.userLang, this.context) },
           {
             role: 'user',
             content: JSON.stringify(
@@ -132,9 +134,14 @@ export class Agent {
     for (const f of chunk) {
       const t = byId.get(f.id);
       const options = t && Array.isArray(t.options) && t.options.length === f.options.length ? t.options : f.options;
-      const tr = { label: t?.label || f.label, explanation: t?.explanation || '', options, section: f.section ? t?.section || f.section : '' };
+      // Small models sometimes hand the label back untranslated; for English there is a second source.
+      const english = /^english$/i.test(this.userLang) && t?.english;
+      const label = (t?.label && t.label !== f.label ? t.label : english) || t?.label || f.label;
+      const tr = { label, explanation: t?.explanation || '', options, section: f.section ? t?.section || f.section : '' };
       this.translations.set(f.id, tr);
       applied.push({ id: f.id, ...tr });
+      // The privacy rules read English; on a form in another language, check the English label too.
+      if (t?.english && !f.sensitive && classify({ ...f, label: t.english }).sensitive) f.sensitive = true;
     }
     await this.page.apply({ fields: applied });
   }
@@ -236,6 +243,7 @@ export class Agent {
             current: this.current,
             fields: this.fieldsForModel(),
             history: this.history.slice(-HISTORY_TURNS),
+            context: this.context,
           }),
         },
         { role: 'user', content: text },
