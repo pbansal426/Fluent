@@ -504,6 +504,45 @@ export class Agent {
     }
   }
 
+  // The form as a list the user can edit directly (the panel's Form view). Private values are never exposed.
+  fieldView() {
+    return this.fields.map((f) => {
+      const t = this.tr(f);
+      return {
+        id: f.id,
+        label: bare(t.label),
+        kind: f.kind,
+        sensitive: !!f.sensitive,
+        required: !!f.required,
+        section: t.section || f.section || '',
+        options: f.options.map((value, i) => ({ value, text: t.options[i] || value })),
+        value: f.sensitive ? '' : this.values.get(f.id) ?? '',
+        filled: this.filled.has(f.id),
+        skipped: this.skipped.has(f.id),
+      };
+    });
+  }
+
+  // The user typed or picked an answer in the Form view. Same rules as everywhere: nothing here goes to the
+  // model, and private values are not remembered.
+  async setValue(id, value) {
+    const field = this.fields.find((f) => f.id === id);
+    if (!field || this.busy) return { ok: false };
+    value = String(value ?? '');
+    const r = await this.page.fill(id, value);
+    if (!r?.ok) return { ok: false };
+    if (value === '') {
+      this.filled.delete(id);
+      this.values.delete(id);
+    } else {
+      this.filled.add(id);
+      this.skipped.delete(id);
+      if (!field.sensitive) this.values.set(id, r.value);
+    }
+    if (this.current?.id === id && value !== '') await this.advance();
+    return { ok: true };
+  }
+
   // Nobody answered for a while: ask again, gently, like a person waiting.
   async nudge() {
     if (!this.current || this.mode !== 'listen') return;

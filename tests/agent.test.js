@@ -259,3 +259,23 @@ test('private value typed in chat goes straight to the field, never to the model
   assert.equal(JSON.stringify(log).includes('123-45-6789'), false);
   assert.equal(await agent.submitPrivate('nope'), false); // not a private field any more
 });
+
+test('form view: fields listed without private values; edits fill the page and advance', async () => {
+  const { agent, dom } = setup([fill(['f1', 'Ana'])]);
+  await agent.start();
+  await agent.handleUser('Ana');
+  let view = agent.fieldView();
+  assert.equal(view.find((v) => v.id === 'f1').value, 'Ana');
+  assert.deepEqual(view.find((v) => v.id === 'f2').options.map((o) => o.text), ['ES:Single', 'ES:Married']);
+  assert.equal((await agent.setValue('f2', 'Married')).ok, true); // typed in the form view while f2 is current
+  assert.equal(dom.get('f2'), 'Married');
+  assert.equal(agent.current.id, 'f3');
+  assert.equal((await agent.setValue('f3', '123-45-6789')).ok, true);
+  view = agent.fieldView();
+  assert.equal(view.find((v) => v.id === 'f3').value, ''); // never echoed back
+  assert.equal(view.find((v) => v.id === 'f3').filled, true);
+  assert.equal(agent.values.has('f3'), false);
+  await agent.setValue('f1', ''); // clearing
+  assert.equal(dom.has('f1'), false);
+  assert.equal(agent.filled.has('f1'), false);
+});

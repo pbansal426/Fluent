@@ -85,3 +85,14 @@ footer[hidden] { display: none; }
 @keyframes wave { 0%, 100% { transform: scaleY(.7); } 50% { transform: scaleY(1.1); } }
 @media (prefers-reduced-motion: reduce) { .mic.on, .mic.speaking .ico-wave { animation: none; } }
 :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* Form view: the form as editable rows */
+#view-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+#view-tabs button { flex: 1; padding: 6px 10px; }
+#view-tabs button[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
+#view-tabs[hidden], #form-view[hidden] { display: none; }
+#form-view { display: grid; gap: 10px; }
+#form-view h3 { margin: 10px 0 2px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+#form-view .frow { display: grid; gap: 4px; }
+#form-view label { font-size: 13px; font-weight: 600; }
+#form-view input:not([type="checkbox"]), #form-view select, #form-view textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border-radius: 8px; }
