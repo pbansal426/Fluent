@@ -325,6 +325,37 @@ test('after "No" the "If you answered Yes" fields that follow are skipped', asyn
   assert.deepEqual([...agent.skipped].sort(), ['d1', 'd2']);
 });
 
+test('after the page helper is reinjected, fields are re-linked by label and the user keeps their progress', async () => {
+  const { agent, dom, log } = setup([fill(['f1', 'Ana']), fill(['f2', 'Married'])]);
+  await agent.start();
+  await agent.handleUser('Ana');
+  assert.equal(agent.current.id, 'f2');
+  // the helper restarted: ids are handed out again from the start, in a different order, so old and new ids collide
+  const swapped = FIELDS.map((f, i) => ({ ...f, id: `f${FIELDS.length - i}` }));
+  agent.page.scan = async () => ({ fields: structuredClone(swapped), texts: [], pageLang: 'en' });
+  const idMap = await agent.relink();
+  assert.equal(idMap.get('f1'), 'f4'); // First name is now f4
+  assert.equal(idMap.get('f2'), 'f3');
+  assert.equal(agent.current.id, 'f3'); // still asking about marital status
+  assert.equal(agent.filled.has('f4'), true); // First name stays answered under its new id
+  assert.equal(agent.filled.has('f1'), false);
+  assert.equal(agent.values.get('f4'), 'Ana');
+  assert.equal(agent.tr(agent.fields.find((f) => f.id === 'f4')).label, 'ES:First name'); // translation followed it
+  // and the next answer goes to the right field
+  agent.page.fill = async (id, v) => (dom.set(id, v), { ok: true, value: v });
+  agent.llm.chat = async () => fill(['f3', 'Married']);
+  await agent.handleUser('casada');
+  assert.equal(dom.get('f3'), 'Married');
+  assert.ok(log.errors.length === 0);
+});
+
+test('relink with nothing in common reports no match', async () => {
+  const { agent } = setup([]);
+  await agent.start();
+  agent.page.scan = async () => ({ fields: [{ ...base, id: 'z1', kind: 'text', label: 'Something else' }], texts: [], pageLang: 'en' });
+  assert.equal((await agent.relink()).size, 0);
+});
+
 test('a long PDF: when a page is finished the assistant moves on to the next page, then finishes', async () => {
   const { agent, log } = setup([fill(['f1', 'Ana'])]);
   const pages = [[FIELDS[0]], [{ ...base, id: 'g1', kind: 'text', label: 'City' }]];

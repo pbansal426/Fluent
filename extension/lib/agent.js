@@ -120,6 +120,41 @@ export class Agent {
     }
   }
 
+  // The page's helper script was lost and reinjected (extension reloaded, page frozen): its field ids start over.
+  // Match the new fields to the old ones by label and keep everything the user already did.
+  // Returns Map(oldId -> newId); empty when nothing matched.
+  async relink(page = this.page) {
+    const scan = await page.scan();
+    const incoming = scan.fields.map((f) => ({ ...f, ...classify(f) }));
+    const taken = new Set();
+    const idMap = new Map();
+    for (const old of this.raw.values()) {
+      const hit = incoming.find((n) => !taken.has(n.id) && n.label === old.label && n.kind === old.kind);
+      if (hit) {
+        taken.add(hit.id);
+        idMap.set(old.id, hit.id);
+      }
+    }
+    if (!idMap.size) return idMap;
+    const re = (id) => idMap.get(id) ?? id;
+    this.filled = new Set([...this.filled].map(re));
+    this.skipped = new Set([...this.skipped].map(re));
+    for (const key of ['values', 'translations', 'pending', 'helpCount']) this[key] = new Map([...this[key]].map(([k, v]) => [re(k), v]));
+    this.raw = new Map([...this.raw].map(([k, f]) => [re(k), f]));
+    const seen = new Set();
+    for (const f of [...this.raw.values(), ...this.fields]) {
+      if (seen.has(f)) continue;
+      seen.add(f);
+      f.id = re(f.id);
+      for (const m of f.members || []) m.id = re(m.id);
+    }
+    if (this.lastFill) this.lastFill.field_id = re(this.lastFill.field_id);
+    await page.apply({ fields: this.fields.filter((f) => this.translations.has(f.id)).map((f) => ({ id: f.id, ...this.translations.get(f.id) })) });
+    if (this.current) await page.highlight(this.current.id);
+    this.log('relink', { matched: idMap.size, of: incoming.length });
+    return idMap;
+  }
+
   // The form grew or shrank (multi-step forms): pick up the new fields, keep what is done.
   async rescan() {
     const scan = await this.page.scan();

@@ -36,8 +36,13 @@ export function expandScale(value) {
   return String(Math.round(parseFloat(m[1].replace(',', '.')) * SCALES[m[2].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')]));
 }
 
+// A date needs a day, a month and a year. If the user only said a year (or an age), the model must not invent the rest.
+const MONTH_WORDS = /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/i;
+const NUMERIC_DATE = /\b\d{1,4}\s*[\/.-]\s*\d{1,2}\s*[\/.-]\s*\d{1,4}\b/;
+
 export function validateValue(field, value, said = '') {
   const v = String(value ?? '').trim();
+  if (v && field.kind === 'date' && said && !MONTH_WORDS.test(said) && !NUMERIC_DATE.test(said)) return { ok: false, reason: 'incomplete-date', phrase: 'invalid_date' };
   if (v && ['checkbox', 'radio', 'select'].includes(field.kind) && HEDGE.test(said)) return { ok: false, reason: 'unsure', phrase: 'invalid_unsure' };
   if (!v || field.kind === 'checkbox' || field.kind === 'radio' || field.kind === 'select' || field.kind === 'date') return { ok: true, value: v };
   // One letter is an answer only for an initial, or when that letter is all the user said.

@@ -60,6 +60,17 @@ test('one letter is only an answer for an initial', () => {
   assert.equal(validateValue(f('Middle Initial'), 'E', 'my initial is E').ok, true);
 });
 
+test('a date the user only half said is not completed by the model', () => {
+  const dob = f('Date of birth', { kind: 'date' });
+  assert.equal(validateValue(dob, '1998-01-01', 'I was born in 1998').phrase, 'invalid_date');
+  assert.equal(validateValue(dob, '1998-01-01', 'I am 27 years old').phrase, 'invalid_date');
+  assert.equal(validateValue(dob, '1998-03-03', 'March third nineteen ninety eight').ok, true);
+  assert.equal(validateValue(dob, '1998-03-03', 'nac\u00ed el 3 de marzo de 1998').ok, true);
+  assert.equal(validateValue(dob, '1998-03-03', '03/03/1998').ok, true);
+  assert.equal(validateValue(dob, '1998-03-03', '3-3-98').ok, true);
+  assert.equal(validateValue(dob, '1998-03-03', '').ok, true); // no sentence to compare with (typed in the Form, copied)
+});
+
 test('choices, dates and checkboxes are left to their own matching', () => {
   for (const kind of ['checkbox', 'radio', 'select', 'date']) assert.equal(validateValue(f('Email address', { kind }), 'yes', '').ok, true);
 });

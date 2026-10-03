@@ -9,7 +9,7 @@ import { createLog } from '../lib/log.js';
 import { createNeuralTts } from '../lib/neural-tts.js';
 
 // Shown at the bottom of the panel, so it is obvious which copy of the extension is running.
-const BUILD = '2026-10-03.8';
+const BUILD = '2026-10-03.10';
 const log = createLog();
 
 const DEFAULTS = {
@@ -233,7 +233,36 @@ async function connect(tab) {
     banner('Fluent cannot run on this page. Open a web page or a PDF with a form.');
     return null;
   }
-  return (msg) => chrome.tabs.sendMessage(tab.id, msg);
+  // If the page's helper script has gone (extension reloaded, tab frozen), put it back, re-link the fields by label
+  // and try once more. Only if that fails too does the user see a message, and then a clean way to start again.
+  const raw = (msg) => chrome.tabs.sendMessage(tab.id, msg);
+  const lost = (e) => /Receiving end does not exist|Could not establish connection|context invalidated/i.test(String(e?.message));
+  // One recovery at a time: calls that fail meanwhile wait for it, then retry. Recovery talks to the page through
+  // the plain connection, so it can never wait on itself.
+  let recovery = null;
+  const recover = () =>
+    (recovery ||= (async () => {
+      log('lost-connection', { started: true, tabId: tab.id });
+      await ensureInjected(tab.id);
+      const map = (await state.agent?.relink?.(bridge(raw))) || new Map();
+      if (state.agent && !map.size) throw new Error('nothing matched');
+      log('lost-connection', { recovered: true });
+      return map;
+    })().finally(() => { recovery = null; }));
+  return async (msg) => {
+    try {
+      return await raw(msg);
+    } catch (e) {
+      if (!lost(e)) throw e;
+      try {
+        const map = await recover();
+        return await raw(map.has(msg.id) ? { ...msg, id: map.get(msg.id) } : msg);
+      } catch (e2) {
+        log('lost-connection', { recovered: false, message: String(e2?.message) });
+        throw Object.assign(new Error('lost connection to the form page'), { kind: 'lost' });
+      }
+    }
+  };
 }
 
 function bridge(send) {
@@ -278,7 +307,12 @@ const ui = {
   error(e) {
     console.error(e);
     log('error', { message: String(e?.message || e) });
-    const message = e?.kind === 'unreachable' ? `${state.phrases.ai_error} (${state.settings.baseUrl})` : String(e?.message || e);
+    if (e?.kind === 'lost') {
+      const text = state.phrases.lost_connection;
+      reset().then(() => { banner(text); });
+      return;
+    }
+    const message = e?.kind === 'unreachable' ? `${state.phrases.ai_error} (${state.settings.baseUrl})` : e?.kind === 'timeout' ? state.phrases.ai_slow : String(e?.message || e);
     banner(message);
     bubble('agent', message);
   },
@@ -334,7 +368,7 @@ function phrasesFor(llm) {
     phraseJobs.set(
       code,
       (async () => {
-        const key = `phrases:v17:${code}`; // bump when PHRASES changes
+        const key = `phrases:v19:${code}`; // bump when PHRASES changes
         const cached = (await chrome.storage.local.get(key))[key];
         if (cached && Object.keys(PHRASES).every((k) => cached[k])) return cached;
         const phrases = await translatePhrases(llm, name);
@@ -372,7 +406,7 @@ async function start() {
     log('start', { build: BUILD, tabUrl: tab.url, lang: lang().code, model: state.settings.model, baseUrl: state.settings.baseUrl, live: state.settings.live });
     render();
   } catch (e) {
-    return banner(e?.kind === 'unreachable' ? `Cannot reach the AI model at ${state.settings.baseUrl}. Is LM Studio's server running?` : String(e?.message || e));
+    return banner(e?.kind === 'unreachable' ? `Cannot reach the AI model at ${state.settings.baseUrl}. Is LM Studio's server running?` : e?.kind === 'timeout' ? state.phrases.ai_slow : String(e?.message || e));
   } finally {
     $('start').disabled = false;
   }

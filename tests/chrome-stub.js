@@ -34,7 +34,11 @@
         if (props.url) pageFrame().src = props.url;
         if (props.active) window.parent.SIM_TAB_UPDATES = [...(window.parent.SIM_TAB_UPDATES || []), tabId];
       },
-      sendMessage: async (_tabId, msg) => routes[msg.type]?.(msg),
+      sendMessage: async (_tabId, msg) => {
+        // Tests simulate the page's helper script disappearing: every message fails until it is injected again.
+        if (window.parent.SIM_LOST) throw new Error('Could not establish connection. Receiving end does not exist.');
+        return routes[msg.type]?.(msg);
+      },
       create: ({ url }) => console.log('would open tab', url),
       onUpdated: noopEvent,
       // Tests switch tabs with window.parent.SIM_ACTIVATE(tabId).
@@ -43,6 +47,15 @@
     },
     scripting: {
       executeScript: async ({ files }) => {
+        if (window.parent.SIM_DEAD) return; // the page cannot be reached at all
+        if (window.parent.SIM_LOST) {
+          window.parent.SIM_LOST = false;
+          // a fresh helper: it knows no fields and hands out ids from the start again
+          const F = pageFrame().contentWindow.__fluent;
+          F.registry.clear();
+          F.seq = 0;
+          pageFrame().contentDocument.querySelectorAll('[data-fluent-id]').forEach((el) => delete el.dataset.fluentId);
+        }
         const doc = pageFrame().contentDocument;
         for (const file of files) {
           await new Promise((resolve, reject) => {

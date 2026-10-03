@@ -3,7 +3,7 @@
 export class LlmError extends Error {
   constructor(kind, message) {
     super(message);
-    this.kind = kind; // 'unreachable' | 'http' | 'bad_json'
+    this.kind = kind; // 'unreachable' | 'timeout' | 'http' | 'bad_json'
   }
 }
 
@@ -69,6 +69,8 @@ export function createClient({ baseUrl, model, apiKey = '', disableThinking = tr
     try {
       res = await fetchImpl(`${root}/chat/completions`, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
     } catch (e) {
+      // A slow answer (a model still loading, a busy GPU) is not the same as an unreachable server.
+      if (e?.name === 'TimeoutError' || e?.name === 'AbortError') throw new LlmError('timeout', `The AI endpoint at ${root} did not answer in time`);
       throw new LlmError('unreachable', `Cannot reach the AI endpoint at ${root}`);
     }
     if (!res.ok) {
@@ -131,10 +133,19 @@ export function createClient({ baseUrl, model, apiKey = '', disableThinking = tr
 
   async function listModels() {
     let res;
-    try {
-      res = await fetchImpl(`${root}/models`, { headers, signal: AbortSignal.timeout(10000) });
-    } catch {
-      throw new LlmError('unreachable', `Cannot reach the AI endpoint at ${root}`);
+    // One quiet retry: a server that is busy loading a model often answers a few seconds later.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        res = await fetchImpl(`${root}/models`, { headers, signal: AbortSignal.timeout(10000) });
+        break;
+      } catch (e) {
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 2500));
+          continue;
+        }
+        if (e?.name === 'TimeoutError' || e?.name === 'AbortError') throw new LlmError('timeout', `The AI endpoint at ${root} did not answer in time`);
+        throw new LlmError('unreachable', `Cannot reach the AI endpoint at ${root}`);
+      }
     }
     if (!res.ok) throw new LlmError('http', `AI endpoint error ${res.status}`);
     const data = await res.json();
