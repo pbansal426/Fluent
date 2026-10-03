@@ -11,7 +11,7 @@ Fill out any web form in your own language. Fluent translates the form in place 
 
 1. Create an OpenRouter key **with a spending cap** (a few dollars is plenty).
 2. Open the Terminal app and run **one command**: `~/Dev/Fluent/tools/share-demo.sh`
-3. Paste the key when it asks (it stays hidden), press Enter, and wait for the line with `https://…lhr.life`. That is your public link.
+3. The first time, paste the key when it asks (it stays hidden), press Enter, and answer **y** to "Save this key". From then on the script never asks again: the key stays in the private file `.openrouter-key` (never committed, never served, never sent to a browser). Wait for the line with `https://…lhr.life`. That is your public link.
    Press Ctrl-C to stop. (`NO_TUNNEL=1` runs the demo without a public link.)
 
 Visitors need no key. The server keeps your key private, pins visitors to one model (`DEMO_MODEL`), caps reply length,

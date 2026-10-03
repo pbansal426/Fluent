@@ -6,7 +6,7 @@
 //  - writes the development log only for requests from this machine, never for visitors.
 import { createServer } from 'node:http';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 
 const TYPES = {
@@ -27,7 +27,10 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const MAX_BODY = 1_000_000;
 
 export function createDemoServer({ root, env = process.env, fetchImpl = (...a) => fetch(...a), now = () => Date.now() } = {}) {
-  const sharedKey = String(env.OPENROUTER_API_KEY || '').replace(/[^\x21-\x7e]/g, ''); // printable ASCII only
+  // The shared key lives on the server only: in the environment, or saved once in the private file .openrouter-key
+  // next to the project (never served, never committed). Printable ASCII only, so pasted invisible characters cannot break it.
+  const keyFromFile = (() => { try { return readFileSync(join(root, '.openrouter-key'), 'utf8'); } catch { return ''; } })();
+  const sharedKey = String(env.OPENROUTER_API_KEY || keyFromFile).replace(/[^\x21-\x7e]/g, '');
   const sharedModel = env.DEMO_MODEL || 'openai/gpt-4o-mini';
   const maxTokens = Number(env.DEMO_MAX_TOKENS) || 3000;
   const perWindow = Number(env.DEMO_RATE_PER_5MIN) || 80; // requests per visitor per 5 minutes

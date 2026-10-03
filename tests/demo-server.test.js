@@ -132,6 +132,29 @@ test('a key pasted with invisible characters (a zero-width space from a web page
   assert.equal(own.status, 200);
 });
 
+test('the shared key can be saved once in a private file; it is used but never served', async () => {
+  const keyFile = join(root, '.openrouter-key');
+  writeFileSync(keyFile, '\u200bsk-or-FROM-FILE\n');
+  try {
+    calls = [];
+    const r = await ask({}, forward('https://openrouter.ai/api/v1/chat/completions', { via: 'tunnel', body: chat() }));
+    assert.equal(r.status, 200);
+    assert.equal(calls.at(-1).init.headers.authorization, 'Bearer sk-or-FROM-FILE');
+    const config = JSON.parse((await ask({}, { path: '/config.json', via: 'tunnel' })).body);
+    assert.equal(config.sharedKey, true);
+    for (const via of ['local', 'tunnel']) {
+      const leak = await ask({}, { path: '/.openrouter-key', via });
+      assert.equal(leak.status, 404);
+      assert.doesNotMatch(leak.body, /FROM-FILE/);
+    }
+    // an environment key wins over the file
+    await ask({ OPENROUTER_API_KEY: 'sk-or-FROM-ENV' }, forward('https://openrouter.ai/api/v1/chat/completions', { via: 'tunnel', body: chat() }));
+    assert.equal(calls.at(-1).init.headers.authorization, 'Bearer sk-or-FROM-ENV');
+  } finally {
+    rmSync(keyFile, { force: true });
+  }
+});
+
 test('visitors\' conversations are never logged; this machine\'s are', async () => {
   const log = join(root, 'logs', 'fluent.log');
   const before = readFileSync(log, 'utf8');

@@ -6,3 +6,5 @@ node_modules/
 skills-lock.json
 graphify-out/
 logs/
+.openrouter-key
+.env
