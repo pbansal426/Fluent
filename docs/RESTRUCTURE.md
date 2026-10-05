@@ -50,6 +50,27 @@ microphone permission inside a side panel vs a page, side-panel focus/lifecycle.
 - Never start corpus/e2e runs unasked (owner's rule); stage everything, then report readiness.
 - Compare `gemma-4-e4b` vs `gemma-4-26b-a4b-qat` vs `qwen3.8-27b` on the corpus once the owner loads each.
 
+## Workstream: smarter, smaller model context (owner request 2026-10-05)
+Goal: send the model as little as possible per turn, tailored to the kind of form being filled.
+**What is sent today** (`turnSystemPrompt` in `lib/prompts.js`, assembled in `Agent.turn`, `lib/agent.js` ~L420):
+- A fixed block of ~19 KB of rules on every turn: email, date, name, choice, navigation, copy, help and mishearing rules for every form,
+  whether or not the form has such fields.
+- `this.context` = title + first 3 page texts, max 300 chars (agent.js L83): the only form-specific knowledge.
+- Dynamic part: current field detail, `open` fields (all of them, as JSON), `answered`, last 3-ish history lines (`HISTORY_TURNS`).
+**Plan (measure first; every change must keep `npm test` and the corpus at or above the current score):**
+1. **Baseline**: log prompt tokens per turn (LM Studio returns `usage`) per form; record in `docs/qa/` or here. No guessing.
+2. **Form profiles**: classify the scan once (immigration/USCIS, tax and employment W-2/W-4/I-9, medical/clinic intake, generic) from
+   title, field labels and language; attach a short profile: what the form is for, plain glossary of its hard terms, where each
+   hard answer is found (A-Number, receipt number, EIN, insurance member ID), common traps, and the right level of help.
+3. **Conditional rules**: split the rules into a small always-on core plus blocks added only when the current/open fields need them
+   (email, date, choice, checkbox, name parts, private fields, navigation, copy). Most turns then need the core and one or two blocks.
+4. **Trim the data**: `open` limited to the current section / next N fields (plus anything the user mentioned), `answered` as ids and
+   short values only, history summarised after N turns, labels deduplicated (translated and original once).
+5. **Cache-friendly**: keep the stable text first and byte-identical between turns so LM Studio can reuse its prompt cache; only the tail changes.
+6. **Per-model**: smaller models (`gemma-4-e4b`) benefit most from a short, concrete prompt; compare on the corpus per model.
+Delegation: Antigravity drafts the per-form-type profiles from the real forms in the repo (cheap, large reading); Codex implements
+the conditional-rule assembler with tests; Claude reviews privacy impact (nothing private may enter any profile or history) and runs the corpus.
+
 ## Open items carried over
 Model repeats itself on the 3rd–4th help request; scanned-PDF OCR, iframe scanning, custom dropdowns, save-progress: not started;
 multi-page PDF only unit-tested; real mic and Chrome load of the newest build unverified.
