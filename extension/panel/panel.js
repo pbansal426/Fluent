@@ -62,9 +62,17 @@ const lang = () => LANGUAGES.find((l) => l.code === state.settings.lang) || LANG
 
 // ---------- settings ----------
 
+// The testing app (see demo/app) sets this: only models served by the local LM Studio are offered, never an endpoint or a key.
+const localOnly = !!window.FLUENT_LOCAL_ONLY;
+
 async function loadSettings() {
   const stored = await chrome.storage.local.get('settings');
   state.settings = { ...DEFAULTS, ...(stored.settings || {}) };
+  if (localOnly) {
+    Object.assign(state.settings, { baseUrl: DEFAULTS.baseUrl, apiKey: '' });
+    document.querySelectorAll('.remote-only').forEach((el) => { el.hidden = true; });
+    $('pick-label').hidden = false;
+  }
   $('base-url').value = state.settings.baseUrl;
   $('model').value = state.settings.model;
   $('api-key').value = state.settings.apiKey;
@@ -105,10 +113,23 @@ async function refreshModels() {
   try {
     const models = await client().listModels();
     $('models').replaceChildren(...models.map((id) => Object.assign(document.createElement('option'), { value: id })));
+    if (localOnly) showLocalModels(models);
     $('settings-note').textContent = `Connected: ${models.length} models`;
   } catch (e) {
-    $('settings-note').textContent = e.message;
+    $('settings-note').textContent = localOnly ? "Can't reach LM Studio. Start its server (lms server start) and open Settings again." : e.message;
   }
+}
+
+// Local-only mode: a plain drop-down of what LM Studio serves (embedding models left out); a model no longer loaded falls back to the first one.
+function showLocalModels(models) {
+  const chat = models.filter((id) => !/embed/i.test(id));
+  if (!chat.length) return;
+  if (!chat.includes(state.settings.model)) {
+    state.settings.model = chat.includes(DEFAULTS.model) ? DEFAULTS.model : chat[0];
+    $('model').value = state.settings.model;
+    chrome.storage.local.set({ settings: state.settings });
+  }
+  $('model-pick').replaceChildren(...chat.map((id) => Object.assign(document.createElement('option'), { value: id, textContent: id, selected: id === state.settings.model })));
 }
 
 // ---------- rendering ----------
@@ -675,6 +696,12 @@ $('save-settings').addEventListener('click', async () => {
   if (state.agent) await reset();
 });
 $('grant-mic').addEventListener('click', askForMic);
+$('model-pick').addEventListener('change', async () => {
+  $('model').value = $('model-pick').value;
+  await saveSettings();
+  $('settings-note').textContent = `Using ${state.settings.model}`;
+  if (state.agent) await reset();
+});
 
 // Paste any AI key and Fluent works out the service, its endpoint and a suitable model.
 let keyTimer;
@@ -835,6 +862,7 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
 });
 
 await loadSettings();
+if (localOnly) { $('use-local').hidden = true; await refreshModels(); }
 applyVoice();
 $('build').textContent = `Fluent build ${BUILD}`;
 render();

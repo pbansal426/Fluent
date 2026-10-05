@@ -19,9 +19,10 @@
 </header>
 
 <section id="settings" hidden>
-  <label>AI endpoint (OpenAI-compatible)<input id="base-url" type="url" spellcheck="false"></label>
-  <label>Model<input id="model" list="models" spellcheck="false"><datalist id="models"></datalist></label>
-  <label>AI key (optional): paste any key from OpenAI, Claude, Gemini, Groq, OpenRouter or xAI and Fluent sets itself up<input id="api-key" type="password" autocomplete="off" spellcheck="false"></label>
+  <label id="pick-label" hidden>Local model (LM Studio)<select id="model-pick"></select></label>
+  <label class="remote-only">AI endpoint (OpenAI-compatible)<input id="base-url" type="url" spellcheck="false"></label>
+  <label class="remote-only">Model<input id="model" list="models" spellcheck="false"><datalist id="models"></datalist></label>
+  <label class="remote-only">AI key (optional): paste any key from OpenAI, Claude, Gemini, Groq, OpenRouter or xAI and Fluent sets itself up<input id="api-key" type="password" autocomplete="off" spellcheck="false"></label>
   <label class="check"><input id="speak" type="checkbox"> Speak replies aloud</label>
   <label class="check"><input id="live" type="checkbox"> Hands-free conversation (listen automatically after speaking)</label>
   <label class="check"><input id="no-think" type="checkbox"> Turn off model "thinking" (much faster)</label>

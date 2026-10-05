@@ -54,6 +54,16 @@ microphone permission inside a side panel vs a page, side-panel focus/lifecycle.
 Model repeats itself on the 3rd–4th help request; scanned-PDF OCR, iframe scanning, custom dropdowns, save-progress: not started;
 multi-page PDF only unit-tested; real mic and Chrome load of the newest build unverified.
 
+## Testing app changes (2026-10-05)
+- **Local models only** in the testing app (`demo/app`, when the server sees a local request): the sidebar's Settings show a "Local model
+  (LM Studio)" drop-down filled from `/v1/models` (embedding models hidden); endpoint and key fields are hidden; any stored
+  OpenRouter endpoint/key is ignored. Cause of the reported "API key" state: the browser had saved OpenRouter settings and a key (401).
+  Public/tunnel visitors keep the shared-key behaviour. Flag: `window.FLUENT_LOCAL_ONLY`, set by `demo/app/chrome-shim.js`.
+- **Every form in the sample bar** on this machine: all top-level `*.pdf` in the repo folder plus 3 web forms (public link: named samples only,
+  unchanged). PDFs are gitignored, so a new worktree needs them linked: `ln -s ~/Dev/Fluent/*.pdf .` from the worktree root.
+- AI browser QA: see `docs/BROWSER-QA.md` (Codex `browser_use`/`computer_use`, Antigravity puppeteer MCP); reports go in `docs/qa/`.
+
 ## Log
+- 2026-10-05 (later): local-model testing app, all-forms sample bar, browser-QA brief; `npm test` 109/109.
 - 2026-10-05: ff-merged task3 into local `main`; `ai-init` run (`.cursor/` links gitignored, `CLAUDE.md`/`AGENTS.md` added);
   graph built; architecture and AI-lane decisions written (this file, `docs/AI-WORKFLOW.md`).

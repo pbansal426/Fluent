@@ -55,12 +55,14 @@ test('only the demo, the panel, the viewer and the sample forms are ever served'
     assert.equal((await ask({}, { path: '/demo/app/index.html', via })).status, 200);
     assert.equal((await ask({}, { path: '/extension/panel/panel.html', via })).status, 200);
     assert.equal((await ask({}, { path: '/fw2_es.pdf', via })).status, 200); // a listed sample
-    for (const path of ['/logs/fluent.log', '/.git/config', '/docs/HANDOFF.md', '/package.json', '/tools/demo-server.mjs', '/secret.pdf', '/.env', '/demo/../logs/fluent.log', '/%2e%2e/logs/fluent.log']) {
+    for (const path of ['/logs/fluent.log', '/.git/config', '/docs/HANDOFF.md', '/package.json', '/tools/demo-server.mjs', ...(via === 'tunnel' ? ['/secret.pdf'] : []), '/.env', '/demo/../logs/fluent.log', '/%2e%2e/logs/fluent.log']) {
       const r = await ask({}, { path, via });
       assert.equal(r.status, 404, `${via} ${path}`);
       assert.doesNotMatch(r.body, /SECRET|secret repo|internal notes/);
     }
   }
+  assert.equal((await ask({}, { path: '/secret.pdf', via: 'local' })).status, 200); // any PDF in the folder: this machine only (testing)
+  assert.equal((await ask({}, { path: '/subdir/x.pdf', via: 'local' })).status, 404); // but only at the top level
   assert.equal((await ask({}, { path: '/tests/e2e.html', via: 'local' })).status, 200); // test pages: this machine only
   assert.equal((await ask({}, { path: '/tests/e2e.html', via: 'tunnel' })).status, 404);
   assert.equal((await ask({}, { path: '/', via: 'tunnel' })).status, 302);

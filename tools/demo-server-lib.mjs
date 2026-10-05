@@ -70,9 +70,15 @@ export function createDemoServer({ root, env = process.env, fetchImpl = (...a) =
     }
   }
 
-  async function samples() {
+  // On this machine (testing) every PDF in the project folder is offered; on a public link only the named samples.
+  const localPdf = (path) => /^\/[^/]+\.pdf$/i.test(path);
+  async function samples(local) {
     const out = [];
-    for (const f of await readdir(root)) if (SAMPLE_NAMES[f]) out.push({ name: SAMPLE_NAMES[f], url: `/${f}` });
+    const files = (await readdir(root)).sort();
+    for (const f of files) {
+      if (SAMPLE_NAMES[f]) out.push({ name: SAMPLE_NAMES[f], url: `/${f}` });
+      else if (local && localPdf(`/${f}`)) out.push({ name: f.replace(/\.pdf$/i, ''), url: `/${f}` });
+    }
     out.push({ name: 'Clinic intake (web form)', url: '/demo/intake.html' });
     out.push({ name: 'Clinic intake (Spanish)', url: '/demo/intake-es.html' });
     out.push({ name: 'I-485 part 1 (Spanish)', url: '/demo/i485-es.html' });
@@ -82,7 +88,7 @@ export function createDemoServer({ root, env = process.env, fetchImpl = (...a) =
   // Only these paths are ever served.
   const servable = (path, local) =>
     !path.split('/').some((seg) => seg.startsWith('.')) &&
-    (path.startsWith('/demo/') || path.startsWith('/extension/') || (path.startsWith('/') && SAMPLE_NAMES[path.slice(1)] !== undefined) || (local && path.startsWith('/tests/')));
+    (path.startsWith('/demo/') || path.startsWith('/extension/') || (path.startsWith('/') && SAMPLE_NAMES[path.slice(1)] !== undefined) || (local && (path.startsWith('/tests/') || localPdf(path))));
 
   return createServer(async (req, res) => {
     try {
@@ -100,7 +106,7 @@ export function createDemoServer({ root, env = process.env, fetchImpl = (...a) =
       if (url.pathname === '/config.json') {
         return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ sharedKey: !!sharedKey, local: isLocal(req), model: sharedModel }));
       }
-      if (url.pathname === '/samples.json') return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(await samples()));
+      if (url.pathname === '/samples.json') return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(await samples(isLocal(req))));
       if (url.pathname === '/') return res.writeHead(302, { location: '/demo/app/' }).end();
       const path = normalize(decodeURIComponent(url.pathname));
       if (path.includes('..') || !servable(path, isLocal(req))) return res.writeHead(404, { 'content-type': 'text/plain' }).end('not found');

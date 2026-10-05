@@ -17,7 +17,8 @@
   header .spacer { flex: 1; }
   button.upload { background: var(--brand); color: #fff; border: 0; border-radius: 10px; padding: 9px 16px; font: 600 14px system-ui; cursor: pointer; display: inline-flex; gap: 8px; align-items: center; }
   button.upload:hover { filter: brightness(1.08); }
-  .samples { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; }
+  .samples { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; overflow-x: auto; white-space: nowrap; min-width: 0; flex: 1; scrollbar-width: thin; }
+  .samples button { flex: none; }
   .samples button { background: transparent; color: var(--ink); border: 1px solid #34425e; border-radius: 999px; padding: 6px 12px; font: 13px system-ui; cursor: pointer; }
   .samples button:hover { border-color: var(--brand); }
   main { display: grid; grid-template-columns: 1fr var(--panel); min-height: 0; }
@@ -109,7 +110,7 @@
   // A visitor on a public link has no LM Studio: the sidebar starts on OpenRouter (the server adds the shared key), unless
   // they already chose something themselves. The owner, on this machine, keeps whatever they had.
   const prepare = fetch('/config.json').then((r) => r.json()).then((cfg) => {
-    if (cfg.local) return;
+    if (cfg.local) { demo.localOnly = true; return; }
     try {
       const store = JSON.parse(localStorage.getItem('fluent-demo-store') || '{}');
       const settings = store.settings || {};

@@ -2,6 +2,8 @@
 // the few chrome.* calls it makes are answered here. Loaded first, inside the sidebar frame.
 (() => {
   const demo = window.parent.demo;
+  // On this machine the testing app offers only the local LM Studio models (no endpoint, no key).
+  window.FLUENT_LOCAL_ONLY = !!demo.localOnly;
   const pageFrame = () => demo.formFrame();
   const F = () => pageFrame().contentWindow.__fluent;
 
