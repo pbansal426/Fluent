@@ -7,6 +7,7 @@ import { createLive } from '../lib/live.js';
 import { detectProvider, pickModel } from '../lib/providers.js';
 import { createLog } from '../lib/log.js';
 import { createNeuralTts } from '../lib/neural-tts.js';
+import { redactPrivate } from '../lib/sensitive.js';
 
 // Shown at the bottom of the panel, so it is obvious which copy of the extension is running.
 const BUILD = '2026-10-03.17';
@@ -464,12 +465,14 @@ function sendText(text, spoken = false) {
   }
   // Typing does not turn the microphone off; without hands-free mode one spoken answer ends the listening.
   if (spoken && !state.settings.live) state.voiceOn = false;
-  log('user', { text, via: spoken ? 'voice' : 'typed', busy: state.busy });
+  // A private number said or typed as ordinary chat is never shown again or logged: only the agent (which redacts it before the model) gets the original.
+  const shown = redactPrivate(text).text;
+  log('user', { text: shown, via: spoken ? 'voice' : 'typed', busy: state.busy });
   // Only a turn that is already talking is cut short; a spoken answer in live mode gets a spoken reply.
   if (state.busy) state.skipSpeech = true;
   speech.stopSpeaking();
   cancelListening();
-  bubble('user', text);
+  bubble('user', shown);
   if (state.busy) {
     state.queue.push(text);
     render();

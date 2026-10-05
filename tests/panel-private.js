@@ -23,6 +23,10 @@
   await wait(() => sim.panel()?.getElementById('start')?.textContent === 'Help me with this form');
   await sim.click('start');
   const p = () => sim.panel();
+  // A number offered as ordinary chat text is hidden in the transcript and never sent to the model.
+  await sim.say('My social is 987-65-4321');
+  checks['chat-typed number hidden in transcript'] = !sim.state().bubbles.some((b) => b.includes('987-65-4321')) && sim.state().bubbles.some((b) => b.includes('[private]'));
+  checks['chat-typed number never sent to the model'] = !sent.some((b) => b.includes('987-65-4321'));
   // Skip ahead (a bare "skip" needs no model) until the Social Security Number comes up.
   for (let i = 0; i < 12 && !/Social Security/i.test(sim.state().typeCard || ''); i++) await sim.say('skip');
   checks['private field is asked'] = /Social Security/i.test(sim.state().typeCard || '');
