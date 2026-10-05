@@ -1,0 +1,7 @@
+site/
+extension/pdf/lib/
+extension/graphify-out/
+node_modules/
+logs/
+*.min.js
+*.min.mjs

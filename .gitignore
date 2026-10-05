@@ -11,3 +11,4 @@ logs/
 .vercel
 .env*
 site/
+.cursor/

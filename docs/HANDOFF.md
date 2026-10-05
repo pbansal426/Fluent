@@ -1,5 +1,7 @@
 # Fluent — handoff
 
+> **Latest (2026-10-05):** a restructure is in progress — see `docs/RESTRUCTURE.md` (plan, web-first sidebar decision) and `docs/AI-WORKFLOW.md` (Claude/Codex/Antigravity lanes). The hackathon deadline has passed and task3 is merged into `main`. The notes below are the history up to 2026-10-03.
+
 Updated 2026-10-03 at the owner's request to hand off immediately. Read this first, then `docs/superpowers/specs/2026-10-02-fluent-design.md` and `README.md`. Prefer small, safe changes; deadline is today at 5:15 PM CDT.
 
 ## 00. Latest update (2026-10-03 midday, branch `worktree-fluent-task3`) — read this before section 0
