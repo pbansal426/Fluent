@@ -13,6 +13,9 @@ Same brief for either tool; give one tool one pass, then compare reports (differ
 ## Tools
 - **Codex**: `codex exec "<this brief + task>"` (features `browser_use` and `computer_use` are enabled).
 - **Antigravity**: `agy -p "<this brief + task>"` (prompt is an argument; puppeteer MCP is enabled). Pick a model with `--model`.
+- Lesson from the first pilot: run `agy -p` in a **foreground** terminal; started in the background it exited silently with no output.
+  The pilot (`docs/qa/2026-10-05-agy-pilot.md`, 14 forms, ~$ low-effort Flash model) found: all forms load, settings correct,
+  one non-form PDF in the list (now hidden), raw filenames (now named), text box lacks an accessible label, controls hidden until Start.
 - Claude in Chrome (this session) can also click and screenshot, but cannot use the microphone.
 
 ## What to check (UI-only, no model needed)
