@@ -23,7 +23,11 @@ export const SAMPLE_NAMES = {
   'fw2.pdf': 'W-2 (English)', 'fw2_es.pdf': 'W-2 (Spanish)', 'fw4sp.pdf': 'W-4 (Spanish)', 'clinica-familiar-es.pdf': 'Clinic intake (Spanish PDF)',
 };
 
-const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+// Extra PDFs offered on this machine only (testing): friendly names, and files that are not forms.
+const LOCAL_NAMES = { 'fw2_spanish.pdf': 'W-2 (Spanish, other copy)', 'i-485_es.pdf': 'Form I-485 (Spanish)' };
+const NOT_FORMS = new Set(['HackthonInstructions.pdf']);
+
+const LOOPBACK =new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const MAX_BODY = 1_000_000;
 
 export function createDemoServer({ root, env = process.env, fetchImpl = (...a) => fetch(...a), now = () => Date.now() } = {}) {
@@ -77,7 +81,7 @@ export function createDemoServer({ root, env = process.env, fetchImpl = (...a) =
     const files = (await readdir(root)).sort();
     for (const f of files) {
       if (SAMPLE_NAMES[f]) out.push({ name: SAMPLE_NAMES[f], url: `/${f}` });
-      else if (local && localPdf(`/${f}`)) out.push({ name: f.replace(/\.pdf$/i, ''), url: `/${f}` });
+      else if (local && localPdf(`/${f}`) && !NOT_FORMS.has(f)) out.push({ name: LOCAL_NAMES[f] || f.replace(/\.pdf$/i, ''), url: `/${f}` });
     }
     out.push({ name: 'Clinic intake (web form)', url: '/demo/intake.html' });
     out.push({ name: 'Clinic intake (Spanish)', url: '/demo/intake-es.html' });
