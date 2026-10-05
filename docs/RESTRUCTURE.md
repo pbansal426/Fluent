@@ -50,6 +50,43 @@ microphone permission inside a side panel vs a page, side-panel focus/lifecycle.
 - Never start corpus/e2e runs unasked (owner's rule); stage everything, then report readiness.
 - Compare `gemma-4-e4b` vs `gemma-4-26b-a4b-qat` vs `qwen3.8-27b` on the corpus once the owner loads each.
 
+## Design direction (owner, 2026-10-05): "spoon-feeding"
+Principle: make finishing the form so easy and fast that a low-literate older non-native speaker ("Grandma Rosa") does it alone,
+and a slightly more able user is never slowed down. Everything is voice-first, but never voice-only.
+Candidate large changes (a few, in this order; the first two are the core):
+1. **Live conversation** (voice loop): free back-and-forth, interruptions, natural voice, a conversation brain separate from the
+   form-filling brain (see earlier sections; research by Antigravity, voice-loop modules by Codex).
+2. **Spoon-feed card UI**: one question at a time as a big card: an icon per kind of answer (person, calendar, phone, home, card,
+   health), a progress strip, "where to find it" diagrams for hard fields (insurance card, A-Number, receipt number), big tap targets,
+   every line also spoken, 6th-grade text, the field highlighted on the form. Fewer controls on screen (the first QA pilot
+   flagged hidden controls and an unlabelled text box).
+3. **Confirm-and-fix inputs** (spelling): speech makes spelling errors, so every answer is shown as an editable chip the moment it is
+   filled. The model says it plainly ("I wrote Maria Elena. Is that right?") and the screen shows big buttons: ✓ Yes, ✎ Fix, ↩ Undo.
+   - *Fill first, confirm second*: the field is filled at once (keeps the current "never ask to confirm before filling" rule and the
+     speed); the chip only lets the user correct it. A tap on Yes is optional, saying nothing means yes.
+   - *Confirm by risk*: names, emails, numbers, dates, addresses always get the chip with spelling help; choices get big option
+     buttons instead; low-risk fields do not stop the flow.
+   - *Spelling fixer*: tap a letter to change it, the speech recogniser's other guesses (`alts`, already collected) as one-tap
+     suggestions, "spell it" mode (say or tap letters, "A as in Apple"), and for emails the common endings (gmail.com, ...) as buttons.
+   - *Choices are buttons*: select/radio/yes-no fields always show the options as large buttons next to the spoken question, so a
+     user who can read can tap instead of speaking.
+4. **Private values: better than typing** (owner doubts typing is right; analysis below).
+5. **Smarter context** (workstream below).
+
+### Private values (SSN, A-Number, card, bank, passport): analysis and recommendation
+Hard rule that stays: the value never reaches the model, history, logs or transcript, and spoken text never reaches a private field.
+Why not "just say it": the browser's speech recogniser (`SpeechRecognition`) sends audio to the browser vendor's cloud, digit strings
+are the type of thing recognisers mishear, and a spoken SSN is overheard in an office or kiosk. Voice for private values is only
+acceptable with an **on-device** recogniser, handled by code only, and still audible, so it would be opt-in and off by default.
+Recommended instead (nothing here involves the model):
+- **Guided keypad**: a big on-screen number pad (digits only, auto-grouped ###-##-####, one group at a time), no keyboard needed,
+  works on a touch kiosk; digits can be shown large and masked/unmasked with one eye button; "Looks right?" shows the number in
+  large grouped digits before it is written. For card/bank the same pad with the right grouping; passport/A-Number accept a letter row.
+- **Read-back stays local**: the app (not the model) can read digits back aloud *only if the user taps "read it to me"*, otherwise silent.
+- **Skip honestly**: a prominent "I don't have it with me" that leaves the field empty and notes it for the end ("bring your card").
+- **Later / roadmap**: camera scan of the card or document (on-device OCR) to fill from the physical card, so nothing is typed at all.
+Which fields count as private stays a code decision (`lib/sensitive.js`), not a prompt decision.
+
 ## Workstream: smarter, smaller model context (owner request 2026-10-05)
 Goal: send the model as little as possible per turn, tailored to the kind of form being filled.
 **What is sent today** (`turnSystemPrompt` in `lib/prompts.js`, assembled in `Agent.turn`, `lib/agent.js` ~L420):
