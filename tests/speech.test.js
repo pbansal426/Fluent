@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSpeech, pickVoice, spokenText } from '../extension/lib/speech.js';
+import { createSpeech, pickVoice, spokenText, splitSentences } from '../extension/lib/speech.js';
 import { createNeuralTts } from '../extension/lib/neural-tts.js';
 
 test('cancel releases speech even when Chrome never emits onend', async () => {
@@ -103,4 +103,22 @@ test('neural voice plays sentence by sentence, prefetches ahead, stops on interr
     assert.equal(browserSpoke, true);
     assert.equal(speech.neural, false); // fell back for the rest of the session
   } finally { delete globalThis.speechSynthesis; delete globalThis.SpeechSynthesisUtterance; }
+});
+
+test('splitSentences avoids breaking on abbreviations, box numbers and decimals', () => {
+  assert.deepEqual(splitSentences('a Núm. de seguro social del empleado. Esta respuesta es privada.'), [
+    'a Núm. de seguro social del empleado.',
+    'Esta respuesta es privada.',
+  ]);
+  assert.deepEqual(splitSentences('Please send to Dr. Watson on 5th Ave. in New York. Next question: what is your name?'), [
+    'Please send to Dr. Watson on 5th Ave. in New York.',
+    'Next question: what is your name?',
+  ]);
+  assert.deepEqual(splitSentences('Look at Box b. Enter your EIN.'), [
+    'Look at Box b. Enter your EIN.',
+  ]);
+  assert.deepEqual(splitSentences('The total is $12.50 today. Can you pay now?'), [
+    'The total is $12.50 today.',
+    'Can you pay now?',
+  ]);
 });

@@ -44,6 +44,52 @@ export const spokenText = (text) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const ABBR = /\b(dr|mr|mrs|ms|prof|st|ave|blvd|rd|apt|ste|no|n[uú]m|vs|etc|e\.g|i\.e|dra|sr|sra|srta|av|avda|pza)\.\s*$/i;
+
+// Splits long speech text into natural spoken sentences without breaking on abbreviations or decimals.
+export function splitSentences(text) {
+  text = String(text || '').trim();
+  if (!text) return [];
+
+  // Protect decimals between digits: 12.50 -> 12__DEC__50
+  const protectedText = text.replace(/(\d)\.(\d)/g, '$1__DEC__$2');
+  const rawParts = protectedText.match(/[^.!?。？！।؟]+[.!?。？！।؟]*\s*/g) || [protectedText];
+
+  const result = [];
+  let buffer = '';
+
+  for (let part of rawParts) {
+    part = part.replace(/__DEC__/g, '.');
+    const combined = buffer ? buffer + part : part;
+    const trimmed = combined.trim();
+
+    // Do not split if the chunk ends on an abbreviation dot
+    if (ABBR.test(trimmed)) {
+      buffer = combined;
+      continue;
+    }
+
+    // Do not split if it ends on a single letter box/item reference (e.g. "Box b.")
+    if (/\b(box|casilla|caja|part|parte)\s+[a-z]\.\s*$/i.test(trimmed)) {
+      buffer = combined;
+      continue;
+    }
+
+    result.push(trimmed);
+    buffer = '';
+  }
+
+  if (buffer) {
+    if (result.length > 0) {
+      result[result.length - 1] += ' ' + buffer.trim();
+    } else {
+      result.push(buffer.trim());
+    }
+  }
+
+  return result.filter(Boolean);
+}
+
 export function createSpeech() {
   const Recognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
   const synth = globalThis.speechSynthesis;
@@ -61,12 +107,6 @@ export function createSpeech() {
       synth.addEventListener('voiceschanged', () => resolve(synth.getVoices()), { once: true });
       setTimeout(() => resolve(synth.getVoices()), 1000);
     });
-  }
-
-
-  // Long utterances get cut off in Chrome, so speak sentence by sentence.
-  function sentences(text) {
-    return text.match(/[^.!?。？！।؟]+[.!?。？！।؟]*\s*/g)?.map((s) => s.trim()).filter(Boolean) || [text];
   }
 
   async function speak(text, lang) {
@@ -88,7 +128,7 @@ export function createSpeech() {
     stopSpeaking();
     const token = ++speakToken;
     const voice = pickVoice(await voicesReady(), lang);
-    for (const part of sentences(text)) {
+    for (const part of splitSentences(text)) {
       if (token !== speakToken) return;
       await new Promise((resolve) => {
         let timer;
