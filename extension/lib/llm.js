@@ -125,7 +125,10 @@ export function createClient({ baseUrl, model, apiKey = '', disableThinking = tr
         const toolCalls = (msg.tool_calls || [])
           .map((c) => ({ name: c.function?.name, args: parseJsonLoose(c.function?.arguments) }))
           .filter((c) => c.name && c.args);
-        const content = stripThink(typeof msg.content === 'string' ? msg.content : Array.isArray(msg.content) ? msg.content.map((p) => p?.text || '').join('') : '');
+        const rawContent = typeof msg.content === 'string' ? msg.content : Array.isArray(msg.content) ? msg.content.map((p) => p?.text || '').join('') : '';
+        const thinkMatch = rawContent.match(/<think>([\s\S]*?)<\/think>/i) || rawContent.match(/^([\s\S]*?)<\/think>/i);
+        const reasoning = msg.reasoning_content || msg.reasoning || (thinkMatch ? thinkMatch[1].trim() : '') || undefined;
+        const content = stripThink(rawContent);
         const finish = data.choices?.[0]?.finish_reason;
         if (tools && !toolCalls.length && content) {
           const names = tools.map((t) => t.function.name);
@@ -134,7 +137,9 @@ export function createClient({ baseUrl, model, apiKey = '', disableThinking = tr
           // Tool-call debris that could not be read must not be shown or spoken to the user.
           if (names.some((n) => content.includes(n)) || content.includes('<|')) return { content: '', toolCalls: [] };
         }
-        return { content, toolCalls, finish };
+        const out = { content, toolCalls, finish };
+        if (reasoning) out.reasoning = reasoning;
+        return out;
       } catch (e) {
         // Not every server knows every optional parameter: drop one and try again.
         const droppable = Object.keys(optional).find((k) => body[k] !== undefined);

@@ -87,11 +87,18 @@ export class Agent {
   log(event, data) {
     if (typeof console !== 'undefined' && console.log) {
       if (event === 'turn') {
-        console.log(`[Fluent Agent] Turn: "${data.said}" -> calls:`, data.calls, data.reasoning ? `reasoning: ${data.reasoning}` : '');
+        const callsStr = data.calls && data.calls.length ? JSON.stringify(data.calls) : '[] (no tools)';
+        console.log(`[Fluent Agent] Turn: "${data.said}" -> calls: ${callsStr}${data.content ? `\n  Content: "${data.content}"` : ''}${data.reasoning ? `\n  Model Reasoning: ${data.reasoning}` : ''}`);
       } else if (event === 'fill') {
-        console.log(`[Fluent Agent] Fill: ${data.field} = "${data.value}"`);
+        console.log(`[Fluent Agent] Fill: ${data.field} = "${data.value}"${data.confirmed ? ' (confirmed spelling)' : ''}`);
       } else if (event === 'spelling-confirm') {
         console.log(`[Fluent Agent] Spelling check on ${data.field}: candidate "${data.candidate}", options:`, data.options);
+      } else if (event === 'navigate') {
+        console.log(`[Fluent Agent] Navigate: action=${data.action}, field=${data.field}, target=${data.target || 'none'}`);
+      } else if (event === 'skip') {
+        console.log(`[Fluent Agent] Skip: field=${data.field}`);
+      } else if (event === 'ask_user') {
+        console.log(`[Fluent Agent] Ask User: "${data.message}"`);
       }
     }
     this.ui.log?.(event, data);
@@ -368,7 +375,11 @@ export class Agent {
   async setUserLanguage(userLang, phrases = this.phrases) {
     if (!userLang || userLang === this.userLang) return;
     this.userLang = userLang;
-    this.phrases = { ...PHRASES, ...phrases };
+    if (this._autoTranslatePhrases && this.llm && !/^english$/i.test(userLang)) {
+      this.phrases = await translatePhrases(this.llm, userLang);
+    } else {
+      this.phrases = { ...PHRASES, ...phrases };
+    }
     this.pendingConfirm = null;
     this.lastSection = '';
     this.sameLanguage = language(this.formLang)?.code === language(this.userLang)?.code;
@@ -465,21 +476,53 @@ export class Agent {
     }
   }
 
+  findField(idOrLabel) {
+    if (!idOrLabel) return null;
+    const s = String(idOrLabel).trim().toLowerCase();
+    let hit = this.fields.find((f) => f.id === idOrLabel);
+    if (hit) return hit;
+    hit = this.fields.find((f) => f.id?.toLowerCase() === s || f.htmlId?.toLowerCase() === s || f.name?.toLowerCase() === s);
+    if (hit) return hit;
+    hit = this.fields.find((f) => f.label?.trim().toLowerCase() === s || bare(f.label).toLowerCase() === s);
+    if (hit) return hit;
+    hit = this.fields.find((f) => {
+      const tr = this.translations.get(f.id);
+      return tr && (tr.label?.trim().toLowerCase() === s || bare(tr.label).toLowerCase() === s);
+    });
+    if (hit) return hit;
+    hit = this.fields.find((f) => f.label?.toLowerCase().includes(s) || s.includes(f.label?.toLowerCase()));
+    if (hit) return hit;
+    return null;
+  }
+
   // What the model is shown of the form: the current question in detail, the next few open ones, and what is answered.
   // Not the whole form: forty fields of noise made a small model lose the question it had just asked.
   modelView() {
     const cur = this.current;
     const brief = (f) => {
       const o = { id: f.id, label: f.label, kind: f.kind };
+      if (f.htmlId && f.htmlId !== f.id) o.name = f.htmlId;
+      else if (f.name && f.name !== f.id) o.name = f.name;
       if (f.section) o.section = f.section;
       if (f.options.length) o.options = f.options;
       if (f.required) o.required = true;
       if (f.sensitive) o.private = true;
+      const tr = this.tr(f);
+      if (tr && tr.label && tr.label !== f.label) o.user_label = tr.label;
+      if (f.placeholder) o.placeholder = f.placeholder;
       return o;
     };
     const recent = new Set([...this.values.keys()].slice(-5));
+    const docHint = cur ? this.getDocumentHint(cur) : null;
     return {
-      current: cur ? { ...brief(cur), asks: this.tr(cur).explanation || undefined, question: this.tr(cur).question || undefined } : null,
+      current: cur
+        ? {
+            ...brief(cur),
+            asks: this.tr(cur).explanation || undefined,
+            question: this.tr(cur).question || undefined,
+            document_hint: docHint?.whereToLook || undefined,
+          }
+        : null,
       open: this.fields.filter((f) => f !== cur && !this.filled.has(f.id) && !this.skipped.has(f.id)).slice(0, 8).map(brief),
       answered: this.fields
         .filter((f) => this.filled.has(f.id))
@@ -582,7 +625,14 @@ export class Agent {
       maxTokens: 800,
     });
 
-    this.log('turn', { said, calls: res.toolCalls.map((c) => ({ name: c.name, args: c.args })), content: res.content || undefined, current: this.current?.label, ms: Date.now() - startedAt });
+    this.log('turn', {
+      said,
+      calls: res.toolCalls.map((c) => ({ name: c.name, args: c.args })),
+      content: res.content || undefined,
+      reasoning: res.reasoning || undefined,
+      current: this.current?.label,
+      ms: Date.now() - startedAt,
+    });
     const done = [];
     const spoken = [];
     const navLog = [];
@@ -596,10 +646,10 @@ export class Agent {
     for (const call of res.toolCalls) {
       if (call.name === 'fill_fields') {
         for (const v of Array.isArray(call.args.values) ? call.args.values : []) {
-          const field = this.fields.find((f) => f.id === v?.field_id);
+          const field = this.findField(v?.field_id);
           if (!field) continue;
           let value = v.value;
-          const copy = v.copy_from ? this.fields.find((f) => f.id === v.copy_from) : null;
+          const copy = v.copy_from ? this.findField(v.copy_from) : null;
           if (v.copy_from) {
             // Only an answer already on the form, and never a private one, can be copied.
             const source = copy && copy !== field && !copy.sensitive ? this.values.get(copy.id) : '';
@@ -635,15 +685,17 @@ export class Agent {
               lang: language(this.userLang)?.code || this.userLang,
             });
             if (spell.needsConfirmation) {
-              this.pendingConfirm = {
-                fieldId: field.id,
-                candidate: spell.candidate,
-                options: spell.options,
-                baseOptions: spell.baseOptions,
-              };
-              this.log('spelling-confirm', { field: field.label, candidate: spell.candidate, options: spell.options });
-              this.pendingPrompt = spell.prompt;
-              spoken.push(spell.prompt);
+              if (!this.pendingConfirm) {
+                this.pendingConfirm = {
+                  fieldId: field.id,
+                  candidate: spell.candidate,
+                  options: spell.options,
+                  baseOptions: spell.baseOptions,
+                };
+                this.log('spelling-confirm', { field: field.label, candidate: spell.candidate, options: spell.options });
+                this.pendingPrompt = spell.prompt;
+                spoken.push(spell.prompt);
+              }
               continue;
             }
             value = spell.value;
@@ -662,9 +714,10 @@ export class Agent {
           progressed = true;
         }
       } else if (call.name === 'skip_field') {
-        const field = this.fields.find((f) => f.id === call.args.field_id) || this.current;
+        const field = this.findField(call.args.field_id) || this.current;
         if (field && !this.filled.has(field.id) && looksLikeSkip(text)) {
           this.skipped.add(field.id);
+          this.log('skip', { field: field.label, userSaid: text });
           if (this.noteSkip(field)) spoken.push(this.phrases.skipped_group);
           progressed = true;
         } else if (field && !this.filled.has(field.id)) {
@@ -680,11 +733,13 @@ export class Agent {
         if (n.handled) progressed = true;
         if (n.info) info = true;
         if (n.log) navLog.push(n.log);
-      } else if (call.name === 'ask_user' && call.args.message) {
+        this.log('navigate', { action: call.args.action, field: call.args.field_id, target: target?.label });
+      } else if ((call.name === 'ask_user' || call.name === 'ask_question') && call.args?.message) {
         reply = String(call.args.message);
+        this.log('ask_user', { message: reply });
       }
     }
-    if (!res.toolCalls.length && res.content) reply = res.content;
+    if (!reply && res.content) reply = res.content;
 
     // Kept as a plain log inside the system prompt: as chat turns, small models start imitating it.
     const outcome = [
@@ -717,13 +772,15 @@ export class Agent {
       }
     }
 
-    // Reading things out is not an answer: carry on with the question that is waiting.
-    if (progressed || (info && this.mode !== 'done')) return this.advance(target);
     if (reply) {
       if (this.current) this.helpCount.set(this.current.id, (this.helpCount.get(this.current.id) || 0) + 1);
-      return this.ui.say(reply);
+      await this.ui.say(reply);
+      if (!progressed && !info) return;
     }
-    if (!refusedPrivate && !redacted && !spoken.length) {
+
+    // Reading things out is not an answer: carry on with the question that is waiting.
+    if (progressed || (info && this.mode !== 'done')) return this.advance(target);
+    if (!refusedPrivate && !redacted && !spoken.length && !reply) {
       // Not understood: say so and ask the question again (with its choices, if it has any), so the user is never
       // left wondering what was asked, for example after talking over the assistant or to someone else.
       const again = this.current && this.mode === 'listen' ? this.lastSpoken : '';
@@ -734,7 +791,7 @@ export class Agent {
   // Moves around the form on the user's request. The model only names an action; code does it and
   // decides what is read out, so private values stay private.
   async navigate({ action, field_id: id }) {
-    const byId = id ? this.fields.find((f) => f.id === id) : null;
+    const byId = id ? this.findField(id) : null;
     const label = (f) => bare(this.tr(f).label);
     const cur = this.current;
     switch (action) {

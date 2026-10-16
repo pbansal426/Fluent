@@ -59,6 +59,9 @@ test('a hedge is not an answer to a choice, and scale words become digits', () =
   assert.equal(validateValue(f('ZIP Code'), '61801', '61801 1234').value, '61801-1234');
   assert.equal(validateValue(f('Legal first name'), 'Maria', 'Maria 2').phrase, 'invalid_name');
   assert.equal(validateValue(f('Legal first name'), 'yes', 'yes').phrase, 'invalid_name');
+  assert.equal(validateValue(f('Legal first name'), 'Bryan', 'Bryan, 14 Elm St').ok, true);
+  assert.equal(validateValue(f('Legal first name'), 'Bryan', 'Bryan, 14 Elm St').value, 'Bryan');
+  assert.equal(validateValue(f('Legal first name'), 'Carlos', 'Carlos, phone is 555-0123').ok, true);
 });
 
 test('one letter is only an answer for an initial', () => {

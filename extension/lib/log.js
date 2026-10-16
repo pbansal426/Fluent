@@ -1,8 +1,11 @@
 // Fire-and-forget development log: posts events to tools/log-server.mjs on this machine.
 // If the server is not running the calls quietly do nothing (and pause for 30 seconds after a failure).
-export function createLog({ url = 'http://127.0.0.1:8788/log', fetchImpl = (...a) => fetch(...a) } = {}) {
+export function createLog({ url = 'http://127.0.0.1:8788/log', fetchImpl = (...a) => fetch(...a), consoleLogging = true } = {}) {
   let pausedUntil = 0;
   return (event, data = {}) => {
+    if (consoleLogging && typeof console !== 'undefined' && console.debug) {
+      console.debug(`[Fluent Log:${event}]`, data);
+    }
     if (Date.now() < pausedUntil) return;
     try {
       fetchImpl(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ t: new Date().toISOString(), event, ...data }), keepalive: true })

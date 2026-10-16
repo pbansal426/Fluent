@@ -112,7 +112,17 @@ export function validateValue(field, value, said = '') {
     return /\d/.test(v) && /^[\w\s-]{3,10}$/.test(v) ? { ok: true, value: v } : { ok: false, reason: 'zip', phrase: 'invalid_zip' };
   }
   if (isName(field)) {
-    if (NAMEISH_NOISE.test(v) || /\d/.test(said)) return { ok: false, reason: 'name', phrase: 'invalid_name' };
+    if (NAMEISH_NOISE.test(v)) return { ok: false, reason: 'name', phrase: 'invalid_name' };
+    if (/\d/.test(said)) {
+      const wv = wordsOf(v);
+      const ws = wordsOf(said);
+      if (!ws.includes(wv)) return { ok: false, reason: 'name', phrase: 'invalid_name' };
+      const remainder = ws.replace(wv, '').trim();
+      const nonDigitWords = remainder.split(/\s+/).filter((w) => w && !/^\d+$/.test(w));
+      if (nonDigitWords.length === 0 || nonDigitWords.every((w) => NAMEISH_NOISE.test(w) || /^(number|no|num|opcion|option)$/i.test(w))) {
+        return { ok: false, reason: 'name', phrase: 'invalid_name' };
+      }
+    }
     const looksLikeName = /^[\p{L}\p{M}\s.'’,-]{1,60}$/u.test(v) && !/\b(first|last|middle|full|my|your)\s+name\b/i.test(v) && !/\b(dot|at|punto|arroba)\b/i.test(v);
     if (!looksLikeName) return { ok: false, reason: 'name', phrase: 'invalid_name' };
   }
