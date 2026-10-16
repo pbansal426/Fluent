@@ -125,4 +125,16 @@ label.check[hidden], button.icon[hidden] { display: none !important; }
 .review-value-wrap { display: flex; align-items: center; gap: 8px; flex: none; }
 .review-val { font-size: 13px; font-weight: 600; color: var(--ok-ink); }
 .review-row.is-private .review-val { color: var(--muted); font-style: italic; font-weight: 400; }
+.review-row.is-skipped { border-left: 3px solid var(--muted); opacity: 0.92; }
+.review-row.is-skipped .review-val { color: var(--muted); font-style: italic; font-weight: 500; }
+.review-actions { display: flex; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.review-actions button { flex: 1; font-size: 12px; padding: 7px 10px; }
+@media print {
+  body * { visibility: hidden; }
+  #review-card, #review-card * { visibility: visible; }
+  #review-card { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 16px; background: #fff !important; color: #000 !important; border: 1px solid #ccc !important; box-shadow: none !important; }
+  .review-edit, .review-actions { display: none !important; }
+  .review-row { background: #fafafa !important; border: 1px solid #e0e0e0 !important; }
+  .review-val { color: #111 !important; }
+}
 

@@ -70,6 +70,65 @@ const VARIANT_GROUPS = [
   },
 ];
 
+const TEEN_TY_PAIRS = [
+  {
+    teen: 13,
+    ty: 30,
+    teenWords: ['13', 'thirteen', 'trece'],
+    tyWords: ['30', 'thirty', 'treinta'],
+    teenDisambiguatePattern: /\b(one\s+three|uno\s+tres)\b/i,
+    tyDisambiguatePattern: /\b(three\s+zero|tres\s+cero)\b/i,
+  },
+  {
+    teen: 14,
+    ty: 40,
+    teenWords: ['14', 'fourteen', 'catorce'],
+    tyWords: ['40', 'forty', 'cuarenta'],
+    teenDisambiguatePattern: /\b(one\s+four|uno\s+cuatro)\b/i,
+    tyDisambiguatePattern: /\b(four\s+zero|cuatro\s+cero)\b/i,
+  },
+  {
+    teen: 15,
+    ty: 50,
+    teenWords: ['15', 'fifteen', 'quince'],
+    tyWords: ['50', 'fifty', 'cincuenta'],
+    teenDisambiguatePattern: /\b(one\s+five|uno\s+cinco)\b/i,
+    tyDisambiguatePattern: /\b(five\s+zero|cinco\s+cero)\b/i,
+  },
+  {
+    teen: 16,
+    ty: 60,
+    teenWords: ['16', 'sixteen', 'dieciseis', 'dieciséis'],
+    tyWords: ['60', 'sixty', 'sesenta'],
+    teenDisambiguatePattern: /\b(one\s+six|uno\s+seis)\b/i,
+    tyDisambiguatePattern: /\b(six\s+zero|seis\s+cero)\b/i,
+  },
+  {
+    teen: 17,
+    ty: 70,
+    teenWords: ['17', 'seventeen', 'diecisiete'],
+    tyWords: ['70', 'seventy', 'setenta'],
+    teenDisambiguatePattern: /\b(one\s+seven|uno\s+siete)\b/i,
+    tyDisambiguatePattern: /\b(seven\s+zero|siete\s+cero)\b/i,
+  },
+  {
+    teen: 18,
+    ty: 80,
+    teenWords: ['18', 'eighteen', 'dieciocho'],
+    tyWords: ['80', 'eighty', 'ochenta'],
+    teenDisambiguatePattern: /\b(one\s+eight|uno\s+ocho)\b/i,
+    tyDisambiguatePattern: /\b(eight\s+zero|ocho\s+cero)\b/i,
+  },
+  {
+    teen: 19,
+    ty: 90,
+    teenWords: ['19', 'nineteen', 'diecinueve'],
+    tyWords: ['90', 'ninety', 'noventa'],
+    teenDisambiguatePattern: /\b(one\s+nine|uno\s+nueve)\b/i,
+    tyDisambiguatePattern: /\b(nine\s+zero|nueve\s+cero)\b/i,
+  },
+];
+
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export class MetacognitiveResolver {
@@ -123,6 +182,48 @@ export class MetacognitiveResolver {
       return { needsConfirmation: false, value: cleanValue };
     }
 
+    const langCode = /^es|spanish|espa/i.test(String(lang || '')) ? 'es' : 'en';
+
+    // Acoustic number metacognition (-teen vs -ty in street numbers, ages, codes)
+    for (const pair of TEEN_TY_PAIRS) {
+      const teenRe = new RegExp(`\\b(${pair.teenWords.join('|')})\\b`, 'i');
+      const tyRe = new RegExp(`\\b(${pair.tyWords.join('|')})\\b`, 'i');
+      const hasTeen = teenRe.test(cleanValue) || teenRe.test(said);
+      const hasTy = tyRe.test(cleanValue) || tyRe.test(said);
+      const altsHaveTeen = (alternatives || []).some((a) => teenRe.test(String(a)));
+      const altsHaveTy = (alternatives || []).some((a) => tyRe.test(String(a)));
+
+      if ((hasTeen && altsHaveTy) || (hasTy && altsHaveTeen)) {
+        if (pair.teenDisambiguatePattern.test(said) || pair.tyDisambiguatePattern.test(said)) {
+          return { needsConfirmation: false, value: cleanValue };
+        }
+        let opt1 = cleanValue;
+        let opt2 = cleanValue;
+        if (hasTeen) {
+          const match = cleanValue.match(teenRe);
+          const replacement = match && /^\d+$/.test(match[0]) ? String(pair.ty) : pair.tyWords[1];
+          opt2 = cleanValue.replace(teenRe, replacement);
+        } else {
+          const match = cleanValue.match(tyRe);
+          const replacement = match && /^\d+$/.test(match[0]) ? String(pair.teen) : pair.teenWords[1];
+          opt2 = cleanValue.replace(tyRe, replacement);
+        }
+        const prompt = langCode === 'es'
+          ? `Para confirmar, ¿dijo ${hasTeen ? `${pair.teen} o ${pair.ty}` : `${pair.ty} o ${pair.teen}`}?`
+          : `Just to be sure, was that ${hasTeen ? `${pair.teen} or ${pair.ty}` : `${pair.ty} or ${pair.teen}`}?`;
+
+        return {
+          needsConfirmation: true,
+          variantType: 'number_split',
+          options: [opt1, opt2],
+          baseOptions: hasTeen ? [String(pair.teen), String(pair.ty)] : [String(pair.ty), String(pair.teen)],
+          prompt,
+          candidate: cleanValue,
+          value: cleanValue,
+        };
+      }
+    }
+
     if (!this.isNameField(field)) {
       return { needsConfirmation: false, value: cleanValue };
     }
@@ -140,14 +241,9 @@ export class MetacognitiveResolver {
         .filter(Boolean)
         .map((t) => t.toLowerCase())
     );
-    const langCode = /^es|spanish|espa/i.test(String(lang || '')) ? 'es' : 'en';
-
     for (const group of VARIANT_GROUPS) {
       const lowerOpts = group.options.map((o) => o.toLowerCase());
       let matchIdx = lowerWords.findIndex((w) => lowerOpts.includes(w));
-      if (matchIdx < 0 && lowerOpts.some((o) => lowerAltTokens.has(o))) {
-        matchIdx = 0;
-      }
       if (matchIdx >= 0) {
         const replaceAt = (replacement) => words.map((w, idx) => (idx === matchIdx ? replacement : w)).join(' ');
         const alreadyDisambiguated = group.resolveRule(said);
@@ -188,6 +284,28 @@ export class MetacognitiveResolver {
       ) {
         return { resolved: true, value: opt };
       }
+    }
+
+    // Acoustic number resolution (-teen vs -ty)
+    for (const pair of TEEN_TY_PAIRS) {
+      const teenRe = new RegExp(`\\b(${pair.teenWords.join('|')})\\b`, 'i');
+      const tyRe = new RegExp(`\\b(${pair.tyWords.join('|')})\\b`, 'i');
+      const saysTy = pair.tyDisambiguatePattern.test(text) || tyRe.test(text);
+      const saysTeen = pair.teenDisambiguatePattern.test(text) || teenRe.test(text);
+      if (saysTy && !pair.teenDisambiguatePattern.test(text)) {
+        const idx = pending.options.findIndex((o) => tyRe.test(o) || new RegExp(`\\b${pair.ty}\\b`).test(o));
+        if (idx >= 0) return { resolved: true, value: pending.options[idx] };
+      }
+      if (saysTeen) {
+        const idx = pending.options.findIndex((o) => teenRe.test(o) || new RegExp(`\\b${pair.teen}\\b`).test(o));
+        if (idx >= 0) return { resolved: true, value: pending.options[idx] };
+      }
+    }
+    if (/\b(first|first one|primero|primera|el primero|la primera)\b/i.test(text) && pending.options.length >= 1) {
+      return { resolved: true, value: pending.options[0] };
+    }
+    if (/\b(second|second one|segundo|segunda|el segundo|la segunda)\b/i.test(text) && pending.options.length >= 2) {
+      return { resolved: true, value: pending.options[1] };
     }
 
     for (const group of VARIANT_GROUPS) {

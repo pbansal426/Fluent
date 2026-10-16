@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lakeside Clinic — Telehealth Phone Intake Simulator</title>
+<style>
+  :root {
+    --ink: #0f172a;
+    --muted: #475569;
+    --line: #cbd5e1;
+    --brand: #1f5f8b;
+    --brand-dark: #133e5c;
+    --bg: #f8fafc;
+    --card-bg: #ffffff;
+    --active-call: #064e3b;
+    --green: #10b981;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  header {
+    background: var(--brand-dark);
+    color: #fff;
+    padding: 14px 24px;
+    border-bottom: 2px solid #0b2538;
+  }
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .brand-title {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: .2px;
+  }
+  .clinic-subtitle {
+    font-size: 13px;
+    opacity: .85;
+  }
+  .call-bar {
+    background: #022c22;
+    color: #a7f3d0;
+    padding: 8px 16px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid #059669;
+  }
+  .pulse-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+    70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  }
+  .timer {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 14px;
+    color: #fff;
+  }
+  main {
+    max-width: 1060px;
+    margin: 24px auto 60px;
+    padding: 0 20px;
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 880px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .form-card {
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 24px 28px;
+    box-shadow: 0 2px 4px rgba(0,0,0,.03);
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 6px;
+    color: var(--brand-dark);
+  }
+  .intro {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 0 0 20px;
+  }
+  fieldset {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    margin: 0 0 20px;
+    padding: 16px 18px 12px;
+    background: #fff;
+  }
+  legend {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--brand);
+    padding: 0 8px;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .c-full { grid-column: span 2; }
+  @media (max-width: 560px) {
+    .row { grid-template-columns: 1fr; }
+    .c-full { grid-column: span 1; }
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  label .req { color: #dc2626; }
+  input[type=text], input[type=date], input[type=tel], input[type=password], textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #94a3b8;
+    border-radius: 5px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  input:focus, textarea:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(31, 95, 139, 0.15);
+  }
+  textarea { min-height: 80px; resize: vertical; }
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 4px 0 0;
+  }
+  .btn-submit {
+    background: var(--brand);
+    color: #fff;
+    border: 0;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .btn-submit:hover { background: var(--brand-dark); }
+  #done {
+    display: none;
+    margin-top: 20px;
+    padding: 14px 18px;
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-radius: 6px;
+    color: #166534;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  /* Telephony Simulator Keypad Card */
+  .telephony-panel {
+    background: #1e293b;
+    color: #f1f5f9;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.15);
+    border: 1px solid #334155;
+  }
+  .keypad-header {
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  .keypad-title {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: .4px;
+    color: #38bdf8;
+    margin: 0 0 4px;
+  }
+  .keypad-desc {
+    font-size: 12px;
+    color: #94a3b8;
+    margin: 0;
+  }
+  .dtmf-display {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 8px 12px;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .dtmf-digits {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: #34d399;
+    min-width: 40px;
+  }
+  .btn-clear {
+    background: transparent;
+    color: #94a3b8;
+    border: 0;
+    cursor: pointer;
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .btn-clear:hover { color: #f87171; }
+  .keypad-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .dial-btn {
+    background: #334155;
+    border: 1px solid #475569;
+    color: #fff;
+    border-radius: 8px;
+    padding: 10px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    transition: all .1s ease;
+  }
+  .dial-btn:hover { background: #475569; border-color: #64748b; }
+  .dial-btn:active { background: #0284c7; transform: scale(.96); }
+  .dial-digit {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .dial-letters {
+    font-size: 9px;
+    color: #cbd5e1;
+    letter-spacing: 1px;
+    margin-top: 3px;
+    text-transform: uppercase;
+  }
+  .keypad-target {
+    font-size: 12px;
+    color: #94a3b8;
+    background: #0f172a;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+  }
+  .target-label {
+    font-weight: 600;
+    color: #e2e8f0;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-top">
+    <div>
+      <div class="brand-title">Lakeside Clinic — Telehealth Phone Intake</div>
+      <div class="clinic-subtitle">Automated Bilingual Telephony Intake · Voice &amp; Touch-Tone Channel</div>
+    </div>
+    <div class="call-bar" role="status" aria-live="polite">
+      <span class="pulse-dot" aria-hidden="true"></span>
+      <span>CALL CONNECTED</span>
+      <span class="timer" id="call-timer">00:01</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="form-card">
+    <h1>Patient Telehealth Intake</h1>
+    <p class="intro">Welcome to Lakeside Clinic phone intake. Your answers are captured in real time by the bilingual intake assistant. Sensitive data may also be typed via touch-tone keypad.</p>
+
+    <form id="phone-intake" novalidate>
+      <fieldset>
+        <legend>Patient Information</legend>
+        <div class="row">
+          <div>
+            <label for="first">Legal first name <span class="req">*</span></label>
+            <input type="text" id="first" name="first_name" autocomplete="given-name" required>
+          </div>
+          <div>
+            <label for="last">Legal last name <span class="req">*</span></label>
+            <input type="text" id="last" name="last_name" autocomplete="family-name" required>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="dob">Date of birth <span class="req">*</span></label>
+            <input type="date" id="dob" name="dob" required>
+          </div>
+          <div>
+            <label for="phone">Phone number <span class="req">*</span></label>
+            <input type="tel" id="phone" name="phone" autocomplete="tel" required>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Identification &amp; Insurance</legend>
+        <div class="row">
+          <div>
+            <label for="member_id">Insurance Member ID</label>
+            <input type="text" id="member_id" name="member_id" autocomplete="off">
+            <p class="hint">Found on the front of your insurance card.</p>
+          </div>
+          <div>
+            <label for="ssn">Social Security Number</label>
+            <input type="text" id="ssn" name="ssn" placeholder="###-##-####" autocomplete="off" maxlength="11">
+            <p class="hint">Used for identity and billing. Kept private.</p>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Intake Details</legend>
+        <div class="row">
+          <div class="c-full">
+            <label for="reason">Reason for call / Medical concern <span class="req">*</span></label>
+            <textarea id="reason" name="reason" placeholder="Briefly describe your symptoms or reason for scheduling..." required></textarea>
+          </div>
+        </div>
+      </fieldset>
+
+      <div>
+        <button type="submit" class="btn-submit">Submit Telehealth Intake</button>
+      </div>
+
+      <div id="done" role="alert">
+        Intake submitted successfully. A clinic coordinator has received your information.
+      </div>
+    </form>
+  </section>
+
+  <aside class="telephony-panel" aria-label="Telehealth Touch-Tone Keypad">
+    <div class="keypad-header">
+      <div class="keypad-title">Touch-Tone DTMF Keypad</div>
+      <p class="keypad-desc">Tap keys to play tones &amp; enter digits privately into the active form field.</p>
+    </div>
+
+    <div class="dtmf-display">
+      <span class="dtmf-digits" id="dtmf-buffer" aria-live="polite">_</span>
+      <button type="button" class="btn-clear" id="btn-dtmf-clear">Clear</button>
+    </div>
+
+    <div class="keypad-grid" role="group" aria-label="Phone Dialpad">
+      <button type="button" class="dial-btn" data-key="1"><span class="dial-digit">1</span><span class="dial-letters">&nbsp;</span></button>
+      <button type="button" class="dial-btn" data-key="2"><span class="dial-digit">2</span><span class="dial-letters">ABC</span></button>
+      <button type="button" class="dial-btn" data-key="3"><span class="dial-digit">3</span><span class="dial-letters">DEF</span></button>
+      <button type="button" class="dial-btn" data-key="4"><span class="dial-digit">4</span><span class="dial-letters">GHI</span></button>
+      <button type="button" class="dial-btn" data-key="5"><span class="dial-digit">5</span><span class="dial-letters">JKL</span></button>
+      <button type="button" class="dial-btn" data-key="6"><span class="dial-digit">6</span><span class="dial-letters">MNO</span></button>
+      <button type="button" class="dial-btn" data-key="7"><span class="dial-digit">7</span><span class="dial-letters">PQRS</span></button>
+      <button type="button" class="dial-btn" data-key="8"><span class="dial-digit">8</span><span class="dial-letters">TUV</span></button>
+      <button type="button" class="dial-btn" data-key="9"><span class="dial-digit">9</span><span class="dial-letters">WXYZ</span></button>
+      <button type="button" class="dial-btn" data-key="*"><span class="dial-digit">*</span><span class="dial-letters">&nbsp;</span></button>
+      <button type="button" class="dial-btn" data-key="0"><span class="dial-digit">0</span><span class="dial-letters">+</span></button>
+      <button type="button" class="dial-btn" data-key="#"><span class="dial-digit">#</span><span class="dial-letters">&nbsp;</span></button>
+    </div>
+
+    <div class="keypad-target">
+      Target: <span class="target-label" id="target-label">Social Security Number</span>
+    </div>
+  </aside>
+</main>
+
+<script>
+  // Simulated call timer
+  let seconds = 1;
+  const timerEl = document.getElementById('call-timer');
+  setInterval(() => {
+    seconds++;
+    const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const s = String(seconds % 60).padStart(2, '0');
+    timerEl.textContent = `${m}:${s}`;
+  }, 1000);
+
+  // Active target field tracking
+  let activeField = document.getElementById('ssn');
+  const targetLabel = document.getElementById('target-label');
+  const bufferEl = document.getElementById('dtmf-buffer');
+  let bufferText = '';
+
+  const inputs = document.querySelectorAll('#phone-intake input, #phone-intake textarea');
+  inputs.forEach((input) => {
+    input.addEventListener('focus', () => {
+      activeField = input;
+      const label = document.querySelector(`label[for="${input.id}"]`);
+      targetLabel.textContent = label ? label.textContent.replace('*', '').trim() : input.name;
+    });
+  });
+
+  // Standard DTMF dual-tone frequencies
+  const DTMF_FREQS = {
+    '1': [697, 1209], '2': [697, 1336], '3': [697, 1477],
+    '4': [770, 1209], '5': [770, 1336], '6': [770, 1477],
+    '7': [852, 1209], '8': [852, 1336], '9': [852, 1477],
+    '*': [941, 1209], '0': [941, 1336], '#': [941, 1477],
+  };
+
+  let audioCtx = null;
+  function playTone(key) {
+    const freqs = DTMF_FREQS[key];
+    if (!freqs) return;
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
+      const [f1, f2] = freqs;
+      const osc1 = audioCtx.createOscillator();
+      const osc2 = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc1.frequency.value = f1;
+      osc2.frequency.value = f2;
+      osc1.type = 'sine';
+      osc2.type = 'sine';
+
+      gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc1.start();
+      osc2.start();
+      osc1.stop(audioCtx.currentTime + 0.16);
+      osc2.stop(audioCtx.currentTime + 0.16);
+    } catch {}
+  }
+
+  function handleKeyPress(key) {
+    playTone(key);
+    bufferText = (bufferText + key).slice(-14);
+    bufferEl.textContent = bufferText || '_';
+
+    if (activeField) {
+      if (key !== '*' && key !== '#') {
+        activeField.value += key;
+        activeField.dispatchEvent(new Event('input', { bubbles: true }));
+        activeField.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+  }
+
+  document.querySelectorAll('.dial-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      handleKeyPress(btn.getAttribute('data-key'));
+    });
+  });
+
+  document.getElementById('btn-dtmf-clear').addEventListener('click', () => {
+    bufferText = '';
+    bufferEl.textContent = '_';
+    if (activeField) {
+      activeField.value = '';
+      activeField.dispatchEvent(new Event('input', { bubbles: true }));
+      activeField.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+
+  document.getElementById('phone-intake').addEventListener('submit', (e) => {
+    e.preventDefault();
+    document.getElementById('done').style.display = 'block';
+  });
+</script>
+</body>
+</html>

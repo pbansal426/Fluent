@@ -19,7 +19,7 @@ const DEFAULTS = {
   apiKey: '',
   lang: 'es',
   speak: true,
-  live: true, // hands-free: listen automatically after the assistant speaks
+  live: false, // hands-free: listen automatically after the assistant speaks (opt-in, so no mic prompt appears unasked)
   noThink: true,
 };
 // Talking over the assistant to interrupt it did not work reliably, so it is off for now (the code stays; set to true to try again).
@@ -382,7 +382,7 @@ async function runTurn(fn) {
     state.pendingRescan = false;
     return runTurn(() => state.agent.rescan());
   }
-  if (state.voiceOn && state.mode === 'listen') listenOnce();
+  if (state.voiceOn && !state.muted && !state.typing && state.mode === 'listen') listenOnce();
   else render();
 }
 
@@ -557,6 +557,8 @@ const MAX_SILENT_ROUNDS = 6; // how many times to keep listening through silence
 // byUser: the user tapped the mic (so it is fine to open the permission tab); otherwise hands-free.
 async function listenOnce(byUser = false) {
   if (state.listening || state.busy || state.away || state.typing || state.mode !== 'listen') return;
+  // Never trigger the browser's microphone prompt unasked: getUserMedia only runs on a tap or once permission is known.
+  if (!byUser && !state.micOk) return banner('Tap the microphone to answer by voice, or type your answers below.', 'info');
   const token = ++state.listenToken;
   const problem = await micProblem();
   if (token !== state.listenToken) return;
@@ -813,6 +815,16 @@ $('translate').addEventListener('click', () => act(() => state.agent.translateTy
 $('repeat').addEventListener('click', () => act(() => state.agent.repeat()));
 $('repeat-card').addEventListener('click', () => act(() => state.agent.repeat()));
 $('review-card')?.addEventListener('click', (e) => {
+  const printBtn = e.target.closest?.('[data-action="print-review"]');
+  if (printBtn) {
+    window.print();
+    return;
+  }
+  const resetBtn = e.target.closest?.('[data-action="new-session"]');
+  if (resetBtn) {
+    act(() => reset());
+    return;
+  }
   const btn = e.target.closest?.('[data-edit-field]');
   if (!btn || !state.agent) return;
   const fieldId = btn.getAttribute('data-edit-field');

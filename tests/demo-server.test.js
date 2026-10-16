@@ -19,6 +19,7 @@ before(() => {
     'demo/app/index.html': '<html>demo</html>', 'extension/panel/panel.html': '<html>panel</html>', 'tests/e2e.html': 'test page',
     'logs/fluent.log': 'SECRET conversation', '.git/config': 'secret repo', 'docs/HANDOFF.md': 'internal notes', 'package.json': '{}',
     'tools/demo-server.mjs': 'source', 'fw2_es.pdf': 'pdf', 'secret.pdf': 'not a sample', '.env': 'KEY=1',
+    'demo/phone-intake.html': '<html>phone intake</html>',
   })) {
     mkdirSync(join(root, path, '..'), { recursive: true });
     writeFileSync(join(root, path), text);
@@ -170,3 +171,14 @@ test('the page learns whether it is local and whether a shared key exists', asyn
   assert.deepEqual(JSON.parse((await ask({}, { path: '/config.json', via: 'local' })).body), { sharedKey: false, local: true, model: 'openai/gpt-4o-mini' });
   assert.equal((await ask(env, { path: '/config.json', via: 'tunnel' })).body.includes('sk-or-x'), false);
 });
+
+test('samples.json lists phone intake simulator and the page is servable', async () => {
+  const res = await ask({}, { path: '/samples.json', via: 'tunnel' });
+  assert.equal(res.status, 200);
+  const list = JSON.parse(res.body);
+  assert.ok(list.some((s) => s.name === 'Phone call intake (Simulator)' && s.url === '/demo/phone-intake.html'));
+
+  const page = await ask({}, { path: '/demo/phone-intake.html', via: 'tunnel' });
+  assert.equal(page.status, 200);
+});
+

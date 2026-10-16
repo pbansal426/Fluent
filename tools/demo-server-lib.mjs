@@ -76,6 +76,7 @@ export function createDemoServer({ root, env = process.env, fetchImpl = (...a) =
     out.push({ name: 'Clinic intake (web form)', url: '/demo/intake.html' });
     out.push({ name: 'Clinic intake (Spanish)', url: '/demo/intake-es.html' });
     out.push({ name: 'I-485 part 1 (Spanish)', url: '/demo/i485-es.html' });
+    out.push({ name: 'Phone call intake (Simulator)', url: '/demo/phone-intake.html' });
     return out;
   }
 

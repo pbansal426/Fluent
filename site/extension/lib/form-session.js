@@ -95,14 +95,56 @@ export function getDocumentHint(field, userLang = 'English') {
   };
 }
 
-export function buildReviewItems({ fields = [], values = new Map(), filled = new Set(), translations = new Map(), typedPrivateLabel = 'typed by you, kept private' } = {}) {
+export function getRequiredDocumentsSummary(fields = [], userLang = 'English') {
+  const seen = new Set();
+  const summary = [];
+  for (const f of fields || []) {
+    const hint = getDocumentHint(f, userLang);
+    if (hint && !seen.has(hint.id)) {
+      seen.add(hint.id);
+      summary.push({
+        id: hint.id,
+        cardTitle: hint.cardTitle,
+        whereToLook: hint.whereToLook,
+        highlightZone: hint.highlightZone,
+        sampleCode: hint.sampleCode,
+      });
+    }
+  }
+  return summary;
+}
+
+export function buildReviewItems({
+  fields = [],
+  values = new Map(),
+  filled = new Set(),
+  skipped = new Set(),
+  translations = new Map(),
+  typedPrivateLabel = 'typed by you, kept private',
+  skippedLabel = 'skipped',
+} = {}) {
   const items = [];
   for (const f of fields) {
-    if (!filled.has(f.id)) continue;
+    const isFilled = filled?.has(f.id);
+    const isSkipped = skipped?.has(f.id);
+    if (!isFilled && !isSkipped) continue;
     const tr = translations.get(f.id) || { label: f.label, options: f.options || [], section: f.section || '' };
     const cleanLabel = String(tr.label || f.label || '').replace(/[\s*:]+$/, '');
     const cleanOrig = String(f.label || '').replace(/[\s*:]+$/, '');
     const section = tr.section || sectionNameOf(f);
+    if (isSkipped) {
+      items.push({
+        id: f.id,
+        label: cleanLabel,
+        originalLabel: cleanOrig,
+        value: '',
+        shownValue: skippedLabel || 'skipped',
+        section,
+        sensitive: !!f.sensitive,
+        skipped: true,
+      });
+      continue;
+    }
     if (f.sensitive) {
       items.push({
         id: f.id,

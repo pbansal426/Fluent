@@ -59,4 +59,33 @@ test('generateBilingualReviewHtml renders side-by-side items with edit buttons a
   assert.match(html, /escrito por usted, privado/);
   assert.doesNotMatch(html, /999-88-7777/);
   assert.match(html, /data-edit-field="f2"/);
+  assert.match(html, /data-action="print-review"/);
+  assert.match(html, /data-action="new-session"/);
+});
+
+test('generateBilingualReviewHtml renders skipped items with Answer button and localized action buttons', () => {
+  const items = [
+    {
+      id: 'f1',
+      label: 'Middle name',
+      originalLabel: 'Middle name',
+      value: '',
+      shownValue: 'skipped',
+      section: 'Personal',
+      sensitive: false,
+      skipped: true,
+    },
+  ];
+
+  const htmlEn = generateBilingualReviewHtml(items, 'en');
+  assert.match(htmlEn, /is-skipped/);
+  assert.match(htmlEn, />Answer</);
+  assert.match(htmlEn, /Print \/ Save Bilingual Summary/);
+  assert.match(htmlEn, /Start New Session/);
+
+  const htmlEs = generateBilingualReviewHtml([{ ...items[0], shownValue: 'omitido' }], 'es');
+  assert.match(htmlEs, /is-skipped/);
+  assert.match(htmlEs, />Responder</);
+  assert.match(htmlEs, /Imprimir \/ Guardar resumen/);
+  assert.match(htmlEs, /Iniciar nueva sesión/);
 });

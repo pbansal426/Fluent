@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FormSession, getDocumentHint, buildReviewItems } from '../extension/lib/form-session.js';
+import { FormSession, getDocumentHint, buildReviewItems, getRequiredDocumentsSummary } from '../extension/lib/form-session.js';
 
 test('FormSession.fromSchema builds milestones and tracks completion accurately', () => {
   const schema = {
@@ -161,5 +161,61 @@ test('FormSession.markSkipped enforces state exclusivity and toPageAdapter suppo
   session.markSkipped('name');
   assert.equal(session.getValue('name'), null);
   assert.equal(session.isComplete(), false);
+});
+
+test('getRequiredDocumentsSummary deduplicates document hints across form fields and localizes', () => {
+  const fields = [
+    { id: 'f1', label: 'First Name' },
+    { id: 'f2', label: 'Health Insurance Group Number' },
+    { id: 'f3', label: 'Rx Group No' }, // duplicate insurance_group hint
+    { id: 'f4', label: 'Alien Registration Number (A-Number)' },
+  ];
+
+  const docsEn = getRequiredDocumentsSummary(fields, 'English');
+  assert.equal(docsEn.length, 2);
+  assert.equal(docsEn[0].id, 'insurance_group');
+  assert.equal(docsEn[0].cardTitle, 'Health Insurance Card');
+  assert.equal(docsEn[1].id, 'alien_number');
+  assert.equal(docsEn[1].cardTitle, 'USCIS Green Card / Work Permit');
+
+  const docsEs = getRequiredDocumentsSummary(fields, 'Spanish');
+  assert.equal(docsEs.length, 2);
+  assert.equal(docsEs[0].cardTitle, 'Tarjeta de Seguro Médico');
+  assert.equal(docsEs[1].cardTitle, 'Tarjeta de Residencia / Permiso (USCIS)');
+
+  assert.deepEqual(getRequiredDocumentsSummary([], 'English'), []);
+});
+
+test('buildReviewItems includes skipped fields with skipped: true and localized skippedLabel', () => {
+  const fields = [
+    { id: 'f1', label: 'First name', kind: 'text', section: 'Personal', options: [] },
+    { id: 'f2', label: 'Middle name', kind: 'text', section: 'Personal', options: [] },
+  ];
+  const values = new Map([['f1', 'Maria']]);
+  const filled = new Set(['f1']);
+  const skipped = new Set(['f2']);
+  const translations = new Map([
+    ['f1', { label: 'Nombre', options: [], section: 'Personal' }],
+    ['f2', { label: 'Segundo nombre', options: [], section: 'Personal' }],
+  ]);
+
+  const review = buildReviewItems({
+    fields,
+    values,
+    filled,
+    skipped,
+    translations,
+    skippedLabel: 'omitido',
+  });
+
+  assert.equal(review.length, 2);
+  assert.equal(review[0].id, 'f1');
+  assert.equal(review[0].shownValue, 'Maria');
+  assert.equal(review[0].skipped, undefined);
+
+  assert.equal(review[1].id, 'f2');
+  assert.equal(review[1].label, 'Segundo nombre');
+  assert.equal(review[1].shownValue, 'omitido');
+  assert.equal(review[1].skipped, true);
 });
 

@@ -4,7 +4,7 @@ import { classify, redactPrivate } from './sensitive.js';
 import { groupChoices, matchOption, fuzzyOption } from './choices.js';
 import { validateValue, plainYesNo, looksLikeSkip } from './audit.js';
 import { detectLanguage, language } from './language.js';
-import { FormSession, getDocumentHint, buildReviewItems } from './form-session.js';
+import { FormSession, getDocumentHint, buildReviewItems, getRequiredDocumentsSummary } from './form-session.js';
 import { MetacognitiveResolver } from './metacognitive.js';
 import {
   PHRASES,
@@ -17,6 +17,7 @@ import {
   translateTextsPrompt,
   TRANSLATE_TEXTS_SCHEMA,
   translateAnswerPrompt,
+  translatePhrases,
 } from './prompts.js';
 
 const FIRST_CHUNK = 4; // small, so the first question comes quickly
@@ -45,13 +46,14 @@ const sentence = (label) => (/[?!؟。？！]$/.test(bare(label)) ? bare(label) 
 
 export class Agent {
   // page: { scan, apply, highlight, focus, fill, read }   (all async, talk to the web page)
-  // ui:   { say(text), prompt(state), filled(items), status(text), error(err) }
-  constructor({ llm, page, ui, userLang, phrases = PHRASES, sessionModel = null }) {
+  constructor({ llm, page, ui, userLang, phrases = PHRASES, sessionModel = null, autoTranslatePhrases = false }) {
     this.llm = llm;
     this.page = page;
     this.ui = ui;
     this.userLang = userLang;
     this.phrases = phrases;
+    this._customPhrases = phrases !== PHRASES;
+    this._autoTranslatePhrases = autoTranslatePhrases;
     this.fields = [];
     this.translations = new Map(); // id -> { label, explanation, options }
     this.pending = new Map(); // id -> promise resolved when its translation is in
@@ -73,16 +75,33 @@ export class Agent {
 
   static fromSchema(schema, opts = {}) {
     const session = FormSession.fromSchema(schema);
-    const agent = new Agent({ ...opts, page: session.toPageAdapter(), sessionModel: session });
+    const agent = new Agent({
+      ...opts,
+      page: session.toPageAdapter(),
+      sessionModel: session,
+      autoTranslatePhrases: opts.phrases ? false : true,
+    });
     return { agent, session };
   }
 
   log(event, data) {
+    if (typeof console !== 'undefined' && console.log) {
+      if (event === 'turn') {
+        console.log(`[Fluent Agent] Turn: "${data.said}" -> calls:`, data.calls, data.reasoning ? `reasoning: ${data.reasoning}` : '');
+      } else if (event === 'fill') {
+        console.log(`[Fluent Agent] Fill: ${data.field} = "${data.value}"`);
+      } else if (event === 'spelling-confirm') {
+        console.log(`[Fluent Agent] Spelling check on ${data.field}: candidate "${data.candidate}", options:`, data.options);
+      }
+    }
     this.ui.log?.(event, data);
   }
 
   async start() {
     this.ui.status('scan');
+    if (this._autoTranslatePhrases && !this._customPhrases && this.llm && this.userLang && !/^english$/i.test(this.userLang)) {
+      this.phrases = await translatePhrases(this.llm, this.userLang);
+    }
     const scan = await this.page.scan();
     this.raw = new Map(scan.fields.map((f) => [f.id, { ...f, ...classify(f) }]));
     this.fields = groupChoices([...this.raw.values()]);
@@ -111,7 +130,17 @@ export class Agent {
     this.ui.status('ready');
     await this.ui.say(this.phrases.greeting);
     const about = await overview;
-    if (about) await this.ui.say(about);
+    const docs = getRequiredDocumentsSummary(this.fields, this.userLang);
+    let docNotice = '';
+    if (docs.length > 0) {
+      const isEs = /^es|spanish|espa/i.test(String(this.userLang || ''));
+      const docTitles = docs.map((d) => d.cardTitle).join(', ');
+      docNotice = isEs
+        ? `Es útil tener a mano su ${docTitles}, o podemos omitirlo por ahora.`
+        : `It helps to have your ${docTitles} handy, or we can skip it for now.`;
+    }
+    const spokenOverview = [about, docNotice].filter(Boolean).join(' ');
+    if (spokenOverview) await this.ui.say(spokenOverview);
     await this.advance();
   }
 
@@ -315,12 +344,15 @@ export class Agent {
   }
 
   getReviewSummary() {
+    const isEs = /^es|spanish|espa/i.test(String(this.userLang || ''));
     return buildReviewItems({
       fields: this.fields,
       values: this.values,
       filled: this.filled,
+      skipped: this.skipped,
       translations: this.translations,
       typedPrivateLabel: this.phrases.typed_private,
+      skippedLabel: isEs ? 'omitido' : 'skipped',
     });
   }
 
@@ -378,9 +410,9 @@ export class Agent {
     const parts = [];
     if (t.question) {
       // Conversational: a natural question, with the section named when it changes.
-      if (t.section && field.section !== this.lastSection) parts.push(sentence(t.section));
+      const newSection = t.section && field.section !== this.lastSection;
       this.lastSection = field.section;
-      parts.push(t.question);
+      parts.push(newSection ? `${(this.phrases.next_section || 'Next, for {section}:').replace('{section}', bare(t.section))} ${t.question}` : t.question);
     } else {
       parts.push(this.spokenLabel(field));
       if (t.explanation) parts.push(t.explanation);
@@ -447,7 +479,7 @@ export class Agent {
     };
     const recent = new Set([...this.values.keys()].slice(-5));
     return {
-      current: cur ? { ...brief(cur), asks: this.tr(cur).explanation || undefined } : null,
+      current: cur ? { ...brief(cur), asks: this.tr(cur).explanation || undefined, question: this.tr(cur).question || undefined } : null,
       open: this.fields.filter((f) => f !== cur && !this.filled.has(f.id) && !this.skipped.has(f.id)).slice(0, 8).map(brief),
       answered: this.fields
         .filter((f) => this.filled.has(f.id))
@@ -610,6 +642,7 @@ export class Agent {
                 baseOptions: spell.baseOptions,
               };
               this.log('spelling-confirm', { field: field.label, candidate: spell.candidate, options: spell.options });
+              this.pendingPrompt = spell.prompt;
               spoken.push(spell.prompt);
               continue;
             }
@@ -666,7 +699,24 @@ export class Agent {
     }
     if (refusedPrivate) await this.ui.say(this.phrases.private_refused);
     else if (redacted) await this.ui.say(this.phrases.redacted);
-    for (const s of spoken) await this.ui.say(s);
+    // A spelling check is the only thing said: the other lines would bury the question.
+    const confirmPrompt = this.pendingConfirm ? spoken.find((s) => s === this.pendingPrompt) : '';
+    for (const s of confirmPrompt ? [confirmPrompt] : spoken) await this.ui.say(s);
+
+    if (this.pendingConfirm) {
+      const confirmField = this.fields.find((f) => f.id === this.pendingConfirm.fieldId);
+      if (confirmField) {
+        this.current = confirmField;
+        const confirmPrompt = spoken.find((s) => s.includes('?') || s.length > 5);
+        if (confirmPrompt) {
+          this.lastAsked = confirmPrompt;
+          this.lastSpoken = confirmPrompt;
+        }
+        this.setMode('listen');
+        return;
+      }
+    }
+
     // Reading things out is not an answer: carry on with the question that is waiting.
     if (progressed || (info && this.mode !== 'done')) return this.advance(target);
     if (reply) {

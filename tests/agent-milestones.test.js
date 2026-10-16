@@ -208,3 +208,54 @@ test('Agent.fromSchema synchronizes grouped checkbox choices back to milestone c
   assert.equal(session.getValue('c_no'), 'false');
 });
 
+test('Agent appends pre-flight document checklist heads-up to overview if form requires documents', async () => {
+  const fields = [
+    { ...base, id: 'f1', kind: 'text', label: 'First name', section: 'Personal', required: true },
+    { ...base, id: 'f2', kind: 'text', label: 'Insurance Group Number', section: 'Insurance', required: true },
+    { ...base, id: 'f3', kind: 'text', label: 'Employer Identification Number (EIN)', section: 'Tax', required: true },
+  ];
+  const { agent, log } = createTestRig(fields, []);
+
+  await agent.start();
+  // Overview message is spoken after greeting
+  assert.ok(log.said.length >= 2);
+  const overviewSpoken = log.said[1];
+  assert.match(overviewSpoken, /Tarjeta de Seguro Médico/i);
+  assert.match(overviewSpoken, /Formulario W-2/i);
+  assert.match(overviewSpoken, /podemos omitirlo por ahora/i);
+});
+
+test('Agent.fromSchema automatically translates phrases for non-English userLang in start()', async () => {
+  const schema = {
+    title: 'Clinic Intake',
+    sections: [
+      {
+        id: 'sec1',
+        title: 'Info',
+        fields: [{ id: 'name', label: 'Full name', kind: 'text' }],
+      },
+    ],
+  };
+  const said = [];
+  const ui = { say: async (t) => void said.push(t), prompt: () => {}, filled: () => {}, status: () => {}, error: () => {} };
+  const llm = {
+    chatJson: async ({ messages }) => {
+      // Check if this is the translatePhrases call
+      if (messages[0].content.includes('Translate the values of this JSON object into Vietnamese')) {
+        return { greeting: 'Xin chào, tôi là Fluent.' };
+      }
+      return {
+        form_language: 'English',
+        fields: [{ id: 'name', label: 'Họ và tên', explanation: '', question: 'Họ và tên của bạn là gì?', options: [], section: '', english: 'Full name' }],
+      };
+    },
+    chat: async () => ({ content: '', toolCalls: [] }),
+  };
+
+  const { agent } = Agent.fromSchema(schema, { llm, ui, userLang: 'Vietnamese' });
+  await agent.start();
+
+  assert.equal(said[0], 'Xin chào, tôi là Fluent.');
+  assert.equal(agent.phrases.greeting, 'Xin chào, tôi là Fluent.');
+});
+

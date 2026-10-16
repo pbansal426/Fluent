@@ -37,21 +37,27 @@ export function generateBilingualReviewHtml(reviewItems = [], userLang = 'en') {
   const isEs = /^es|spanish|espa/i.test(String(userLang || ''));
   const heading = isEs ? 'Resumen de verificación bilingüe' : 'Bilingual Verification Summary';
   const editLabel = isEs ? 'Cambiar' : 'Edit';
+  const answerLabel = isEs ? 'Responder' : 'Answer';
+  const printLabel = isEs ? 'Imprimir / Guardar resumen' : 'Print / Save Bilingual Summary';
+  const newSessionLabel = isEs ? 'Iniciar nueva sesión' : 'Start New Session';
 
   const rows = reviewItems
     .map(
       (item) => {
-        const displayVal = item.sensitive
+        const isSkipped = !!item.skipped;
+        const displayVal = item.sensitive && !isSkipped
           ? item.shownValue || (isEs ? 'escrito por usted, privado' : 'typed by you, kept private')
           : item.shownValue || item.value;
-        return `<div class="review-row${item.sensitive ? ' is-private' : ''}">
+        const btnLabel = isSkipped ? answerLabel : editLabel;
+        const rowClass = `review-row${item.sensitive ? ' is-private' : ''}${isSkipped ? ' is-skipped' : ''}`;
+        return `<div class="${rowClass}">
       <div class="review-labels">
         <span class="review-user-label">${esc(item.label)}</span>
         <span class="review-orig-label">${esc(item.originalLabel)}</span>
       </div>
       <div class="review-value-wrap">
         <span class="review-val">${esc(displayVal)}</span>
-        <button type="button" class="small review-edit" data-edit-field="${esc(item.id)}">${esc(editLabel)}</button>
+        <button type="button" class="small review-edit" data-edit-field="${esc(item.id)}">${esc(btnLabel)}</button>
       </div>
     </div>`;
       }
@@ -61,5 +67,9 @@ export function generateBilingualReviewHtml(reviewItems = [], userLang = 'en') {
   return `<div class="review-sheet">
     <div class="review-title">${esc(heading)}</div>
     <div class="review-list">${rows}</div>
+    <div class="review-actions">
+      <button type="button" class="small review-print" data-action="print-review">${esc(printLabel)}</button>
+      <button type="button" class="small review-reset" data-action="new-session">${esc(newSessionLabel)}</button>
+    </div>
   </div>`;
 }

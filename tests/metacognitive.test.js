@@ -88,3 +88,35 @@ test('MetacognitiveResolver handles multi-word full names and preserves surnames
   assert.deepEqual(resolvedMiddle, { resolved: true, value: 'Maria Sarah Lopez' });
 });
 
+test('MetacognitiveResolver detects -teen vs -ty acoustic number ambiguities and resolves them', () => {
+  const resolver = new MetacognitiveResolver();
+  const ageField = { id: 'age', label: 'Age', kind: 'text' };
+  const addressField = { id: 'address', label: 'Street address', kind: 'text' };
+
+  // 14 vs 40 when alternatives contains counterpart
+  const res14 = resolver.assessSpelling(ageField, '14', { said: '14', alternatives: ['40'], lang: 'en' });
+  assert.equal(res14.needsConfirmation, true);
+  assert.equal(res14.variantType, 'number_split');
+  assert.deepEqual(res14.options, ['14', '40']);
+  assert.match(res14.prompt, /14 or 40/i);
+
+  // 15 vs 50 in Spanish street address
+  const resStreetEs = resolver.assessSpelling(addressField, '15 Calle Mayor', { said: '15 Calle Mayor', alternatives: ['50 Calle Mayor'], lang: 'es' });
+  assert.equal(resStreetEs.needsConfirmation, true);
+  assert.deepEqual(resStreetEs.options, ['15 Calle Mayor', '50 Calle Mayor']);
+  assert.match(resStreetEs.prompt, /15 o 50/i);
+
+  // Skips confirmation if user already disambiguated ("14, one four")
+  const disambiguated = resolver.assessSpelling(ageField, '14', { said: '14, one four', alternatives: ['40'], lang: 'en' });
+  assert.equal(disambiguated.needsConfirmation, false);
+  assert.equal(disambiguated.value, '14');
+
+  // Resolves follow-up confirmations
+  const pendingStreet = { fieldId: 'address', candidate: '14 Elm St', options: ['14 Elm St', '40 Elm St'] };
+  assert.deepEqual(resolver.resolveConfirmation(pendingStreet, '40'), { resolved: true, value: '40 Elm St' });
+  assert.deepEqual(resolver.resolveConfirmation(pendingStreet, 'forty'), { resolved: true, value: '40 Elm St' });
+  assert.deepEqual(resolver.resolveConfirmation(pendingStreet, 'four zero'), { resolved: true, value: '40 Elm St' });
+  assert.deepEqual(resolver.resolveConfirmation(pendingStreet, 'fourteen'), { resolved: true, value: '14 Elm St' });
+  assert.deepEqual(resolver.resolveConfirmation(pendingStreet, 'the second one'), { resolved: true, value: '40 Elm St' });
+});
+
