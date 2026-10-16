@@ -820,6 +820,24 @@ $('review-card')?.addEventListener('click', (e) => {
     window.print();
     return;
   }
+  const exportBtn = e.target.closest?.('[data-action="export-json"]');
+  if (exportBtn && state.agent) {
+    const data = {
+      app: 'Fluent',
+      exportedAt: new Date().toISOString(),
+      language: lang().name,
+      fields: state.review || [],
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), {
+      href: url,
+      download: `fluent-intake-${new Date().toISOString().slice(0, 10)}.json`,
+    });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    return;
+  }
   const resetBtn = e.target.closest?.('[data-action="new-session"]');
   if (resetBtn) {
     act(() => reset());

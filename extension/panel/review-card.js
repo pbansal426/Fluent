@@ -39,6 +39,7 @@ export function generateBilingualReviewHtml(reviewItems = [], userLang = 'en') {
   const editLabel = isEs ? 'Cambiar' : 'Edit';
   const answerLabel = isEs ? 'Responder' : 'Answer';
   const printLabel = isEs ? 'Imprimir / Guardar resumen' : 'Print / Save Bilingual Summary';
+  const exportLabel = isEs ? 'Descargar datos (JSON)' : 'Download Data (JSON)';
   const newSessionLabel = isEs ? 'Iniciar nueva sesión' : 'Start New Session';
 
   const rows = reviewItems
@@ -69,6 +70,7 @@ export function generateBilingualReviewHtml(reviewItems = [], userLang = 'en') {
     <div class="review-list">${rows}</div>
     <div class="review-actions">
       <button type="button" class="small review-print" data-action="print-review">${esc(printLabel)}</button>
+      <button type="button" class="small review-export" data-action="export-json">${esc(exportLabel)}</button>
       <button type="button" class="small review-reset" data-action="new-session">${esc(newSessionLabel)}</button>
     </div>
   </div>`;

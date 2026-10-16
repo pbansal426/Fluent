@@ -61,6 +61,7 @@ test('generateBilingualReviewHtml renders side-by-side items with edit buttons a
   assert.match(html, /data-edit-field="f2"/);
   assert.match(html, /data-action="print-review"/);
   assert.match(html, /data-action="new-session"/);
+  assert.match(html, /data-action="export-json"/);
 });
 
 test('generateBilingualReviewHtml renders skipped items with Answer button and localized action buttons', () => {
@@ -82,10 +83,12 @@ test('generateBilingualReviewHtml renders skipped items with Answer button and l
   assert.match(htmlEn, />Answer</);
   assert.match(htmlEn, /Print \/ Save Bilingual Summary/);
   assert.match(htmlEn, /Start New Session/);
+  assert.match(htmlEn, /Download Data \(JSON\)/);
 
   const htmlEs = generateBilingualReviewHtml([{ ...items[0], shownValue: 'omitido' }], 'es');
   assert.match(htmlEs, /is-skipped/);
   assert.match(htmlEs, />Responder</);
   assert.match(htmlEs, /Imprimir \/ Guardar resumen/);
   assert.match(htmlEs, /Iniciar nueva sesión/);
+  assert.match(htmlEs, /Descargar datos \(JSON\)/);
 });
