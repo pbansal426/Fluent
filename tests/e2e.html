@@ -4,7 +4,7 @@
        node tests/run-harness.mjs "http://127.0.0.1:8765/tests/e2e.html" out.png            Spanish speaker, English web form
        node tests/run-harness.mjs "http://127.0.0.1:8765/tests/e2e.html?case=w2" out.png    English speaker, Spanish W-2 PDF
      (the w2 case needs fw2_es.pdf in the repo root, which is not in git)
-     Other query options: &model=google/gemma-4-e4b&base=http://localhost:1234/v1 -->
+     Other query options: &model=google/gemma-4-26b-a4b-qat&base=http://localhost:1234/v1 -->
 <meta charset="utf-8">
 <title>Fluent end-to-end</title>
 <iframe id="page" style="width:1100px;height:2300px;border:0"></iframe>
@@ -201,7 +201,7 @@ async function run() {
   };
 
   const sent = [];
-  const base = createClient({ baseUrl: q.get('base') || 'http://localhost:1234/v1', model: q.get('model') || 'google/gemma-4-e4b' });
+  const base = createClient({ baseUrl: q.get('base') || 'http://localhost:1234/v1', model: q.get('model') || 'google/gemma-4-26b-a4b-qat' });
   const llm = {
     chat: (o) => { sent.push(JSON.stringify(o.messages)); return base.chat(o); },
     chatJson: (o) => { sent.push(JSON.stringify(o.messages)); return base.chatJson(o); },

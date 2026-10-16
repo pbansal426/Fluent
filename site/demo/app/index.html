@@ -49,15 +49,17 @@
 
 <script>
   const $ = (id) => document.getElementById(id);
-  // Optional settings in the address (?lang=es&speak=0&live=0), for rehearsals and tests.
+  // Optional settings in the address (?lang=es&speak=0&live=0&model=...), for rehearsals and tests.
   {
     const q = new URLSearchParams(location.search);
     const store = (() => { try { return JSON.parse(localStorage.getItem('fluent-demo-store') || '{}'); } catch { return {}; } })();
     const settings = { ...(store.settings || {}) };
+    if (settings.model === 'google/gemma-4-e4b') settings.model = 'google/gemma-4-26b-a4b-qat';
     if (q.has('lang')) settings.lang = q.get('lang');
     if (q.has('speak')) settings.speak = q.get('speak') !== '0';
     if (q.has('live')) settings.live = q.get('live') !== '0';
-    if ([...q.keys()].some((k) => ['lang', 'speak', 'live'].includes(k))) {
+    if (q.has('model')) settings.model = q.get('model');
+    if ([...q.keys()].some((k) => ['lang', 'speak', 'live', 'model'].includes(k)) || store.settings?.model === 'google/gemma-4-e4b') {
       try { localStorage.setItem('fluent-demo-store', JSON.stringify({ ...store, settings })); } catch {}
     }
   }

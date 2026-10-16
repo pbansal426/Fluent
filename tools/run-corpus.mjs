@@ -10,7 +10,7 @@ import { Agent } from '../extension/lib/agent.js';
 const corpus = JSON.parse(readFileSync(new URL('../tests/corpus.json', import.meta.url), 'utf8'));
 const only = process.argv.slice(2);
 const base = { inputType: 'text', name: '', htmlId: '', autocomplete: '', placeholder: '', helpText: '', required: false, maxLength: 0, options: [], value: '', section: '' };
-const model = process.env.MODEL || 'google/gemma-4-e4b';
+const model = process.env.MODEL || 'google/gemma-4-26b-a4b-qat';
 const baseUrl = process.env.BASE_URL || 'http://localhost:1234/v1';
 const apiKey = process.env.API_KEY || '';
 

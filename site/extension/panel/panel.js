@@ -15,7 +15,7 @@ const log = createLog();
 
 const DEFAULTS = {
   baseUrl: 'http://localhost:1234/v1',
-  model: 'google/gemma-4-e4b',
+  model: 'google/gemma-4-26b-a4b-qat',
   apiKey: '',
   lang: 'es',
   speak: true,
