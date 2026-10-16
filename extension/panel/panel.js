@@ -7,6 +7,7 @@ import { createLive } from '../lib/live.js';
 import { detectProvider, pickModel } from '../lib/providers.js';
 import { createLog } from '../lib/log.js';
 import { createNeuralTts } from '../lib/neural-tts.js';
+import { renderMilestoneText, generateDocumentHintHtml, generateBilingualReviewHtml } from './review-card.js';
 
 // Shown at the bottom of the panel, so it is obvious which copy of the extension is running.
 const BUILD = '2026-10-03.17';
@@ -18,7 +19,7 @@ const DEFAULTS = {
   apiKey: '',
   lang: 'es',
   speak: true,
-  live: true, // hands-free: listen automatically after the assistant speaks
+  live: false, // hands-free: listen automatically after the assistant speaks (opt-in, so no mic prompt appears unasked)
   noThink: true,
 };
 // Talking over the assistant to interrupt it did not work reliably, so it is off for now (the code stays; set to true to try again).
@@ -35,6 +36,9 @@ const state = {
   tabId: null,
   mode: 'idle',
   field: null,
+  milestone: null,
+  documentHint: null,
+  review: null,
   busy: false,
   voiceOn: false,
   listening: false,
@@ -160,6 +164,22 @@ function render() {
   $('composer').hidden = !started;
   $('start').textContent = lang().start;
   document.documentElement.lang = lang().code;
+
+  const milestoneText = started && state.mode !== 'done' ? renderMilestoneText(state.milestone, lang().code) : '';
+  if ($('milestone-bar')) {
+    $('milestone-bar').hidden = !milestoneText;
+    $('milestone-bar').textContent = milestoneText;
+  }
+  if ($('doc-hint-card')) {
+    const hintHtml = started && state.mode !== 'done' ? generateDocumentHintHtml(state.documentHint) : '';
+    $('doc-hint-card').hidden = !hintHtml;
+    $('doc-hint-card').innerHTML = hintHtml;
+  }
+  if ($('review-card')) {
+    const reviewHtml = started && state.mode === 'done' ? generateBilingualReviewHtml(state.review, lang().code) : '';
+    $('review-card').hidden = !reviewHtml;
+    $('review-card').innerHTML = reviewHtml;
+  }
 
   const typing = state.mode === 'type';
   const privateField = typing && state.field?.sensitive;
@@ -303,6 +323,9 @@ const ui = {
     state.mode = p.mode;
     state.field = p.field;
     state.canTranslate = p.canTranslate;
+    state.milestone = p.milestone || null;
+    state.documentHint = p.documentHint || null;
+    state.review = p.review || null;
     render();
   },
   filled: filledBubble,
@@ -359,7 +382,7 @@ async function runTurn(fn) {
     state.pendingRescan = false;
     return runTurn(() => state.agent.rescan());
   }
-  if (state.voiceOn && state.mode === 'listen') listenOnce();
+  if (state.voiceOn && !state.muted && !state.typing && state.mode === 'listen') listenOnce();
   else render();
 }
 
@@ -424,7 +447,7 @@ async function reset() {
   speech.stopListening();
   closeLive();
   state.send?.({ type: 'fluent:clear' }).catch(() => {});
-  Object.assign(state, { away: false, agent: null, send: null, mode: 'idle', field: null, busy: false, queue: [], pendingRescan: false, pageListen: false, voiceOn: false, muted: false, listening: false, speaking: false, skipSpeech: false, phrases: { ...PHRASES } });
+  Object.assign(state, { away: false, agent: null, send: null, mode: 'idle', field: null, milestone: null, documentHint: null, review: null, busy: false, queue: [], pendingRescan: false, pageListen: false, voiceOn: false, muted: false, listening: false, speaking: false, skipSpeech: false, phrases: { ...PHRASES } });
   banner('');
   render();
 }
@@ -512,7 +535,10 @@ const micBanner = (where, code) => banner(`Microphone (${where}: ${code}). ${MIC
 async function recognise() {
   if (!state.pageListen) {
     try {
-      return await speech.listen(lang().speech, { onInterim: (t) => ($('interim').textContent = t) });
+      return await speech.listen(lang().speech, {
+        onInterim: (t) => ($('interim').textContent = t),
+        onHesitation: (hesitant) => state.live?.setAdaptivePause({ hesitant }),
+      });
     } catch (e) {
       if (!/not-allowed/.test(e.message)) throw Object.assign(e, { where: 'panel' });
       console.warn('Fluent: speech recognition refused in the panel, switching to the page', e.message);
@@ -531,6 +557,8 @@ const MAX_SILENT_ROUNDS = 6; // how many times to keep listening through silence
 // byUser: the user tapped the mic (so it is fine to open the permission tab); otherwise hands-free.
 async function listenOnce(byUser = false) {
   if (state.listening || state.busy || state.away || state.typing || state.mode !== 'listen') return;
+  // Never trigger the browser's microphone prompt unasked: getUserMedia only runs on a tap or once permission is known.
+  if (!byUser && !state.micOk) return banner('Tap the microphone to answer by voice, or type your answers below.', 'info');
   const token = ++state.listenToken;
   const problem = await micProblem();
   if (token !== state.listenToken) return;
@@ -628,7 +656,7 @@ function talkOver() {
   state.skipSpeech = true;
   state.voiceOn = true;
   state.questionCut = true; // the rest of what the assistant was saying (maybe the question) was not heard
-  speech.stopSpeaking();
+  speech.duckSpeaking();
 }
 
 // The one microphone button. Hands-free mode: mute / unmute. Otherwise: tap to talk once.
@@ -662,8 +690,13 @@ function toggleMic() {
 $('lang').replaceChildren(...LANGUAGES.map((l) => Object.assign(document.createElement('option'), { value: l.code, textContent: l.native })));
 $('lang').addEventListener('change', async () => {
   await saveSettings();
+  const nextPhrases = await phrasesFor(client());
+  if (state.agent) {
+    state.phrases = nextPhrases;
+    await act(() => state.agent.setUserLanguage(lang().name, nextPhrases));
+    return;
+  }
   await reset();
-  phrasesFor(client());
 });
 $('settings-btn').addEventListener('click', () => {
   $('settings').hidden = !$('settings').hidden;
@@ -781,6 +814,22 @@ $('skip').addEventListener('click', () => act(() => state.agent.skipCurrent()));
 $('translate').addEventListener('click', () => act(() => state.agent.translateTyped()));
 $('repeat').addEventListener('click', () => act(() => state.agent.repeat()));
 $('repeat-card').addEventListener('click', () => act(() => state.agent.repeat()));
+$('review-card')?.addEventListener('click', (e) => {
+  const printBtn = e.target.closest?.('[data-action="print-review"]');
+  if (printBtn) {
+    window.print();
+    return;
+  }
+  const resetBtn = e.target.closest?.('[data-action="new-session"]');
+  if (resetBtn) {
+    act(() => reset());
+    return;
+  }
+  const btn = e.target.closest?.('[data-edit-field]');
+  if (!btn || !state.agent) return;
+  const fieldId = btn.getAttribute('data-edit-field');
+  if (fieldId) act(() => state.agent.editField(fieldId));
+});
 $('show-tr').addEventListener('change', (e) => {
   state.send?.({ type: 'fluent:visible', show: e.target.checked }).catch(() => {});
 });

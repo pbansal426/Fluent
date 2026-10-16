@@ -22,7 +22,12 @@ for (const f of readdirSync(root)) {
     samples.push({ name: SAMPLE_NAMES[f], url: `/${f}` });
   }
 }
-samples.push({ name: 'Clinic intake (web form)', url: '/demo/intake.html' }, { name: 'Clinic intake (Spanish)', url: '/demo/intake-es.html' }, { name: 'I-485 part 1 (Spanish)', url: '/demo/i485-es.html' });
+samples.push(
+  { name: 'Clinic intake (web form)', url: '/demo/intake.html' },
+  { name: 'Clinic intake (Spanish)', url: '/demo/intake-es.html' },
+  { name: 'I-485 part 1 (Spanish)', url: '/demo/i485-es.html' },
+  { name: 'Phone call intake (Simulator)', url: '/demo/phone-intake.html' },
+);
 writeFileSync(join(out, 'samples.json'), JSON.stringify(samples));
 
 // what the page asks the server at start: a visitor is never "local", and the shared key exists on the host

@@ -10,6 +10,7 @@ export const PHRASES = {
   private_failed: 'That did not fit in the box. Please check it and type it again.',
   filled: 'Got it.',
   options: 'You can choose',
+  next_section: 'Next, for {section}:',
   optional: 'If a question is not for you, just say skip.',
   skip_word: 'skip',
   checkbox: 'Say yes to check this box, or no to leave it empty.',

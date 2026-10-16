@@ -1,4 +1,5 @@
 // Chrome's built-in speech: recognition (speech-to-text) and synthesis (text-to-speech).
+import { detectHesitation } from './live.js';
 
 // `start` is the start-button label in the language itself, shown before any model call.
 export const LANGUAGES = [
@@ -50,6 +51,7 @@ export function createSpeech() {
   let speakToken = 0;
   let finishSpeaking = null;
   let finishListening = null;
+  let lastAlts = []; // the recogniser's other guesses for the last thing it heard
   let neural = null; // optional { speak(text, lang), stop() }: a neural cloud voice, used while it works
 
   function voicesReady() {
@@ -116,7 +118,7 @@ export function createSpeech() {
   }
 
   // Resolves with what the user said ('' if nothing); rejects with the recognition error code.
-  function listen(lang, { onInterim } = {}) {
+  function listen(lang, { onInterim, onHesitation } = {}) {
     return new Promise((resolve, reject) => {
       if (!Recognition) return reject(new Error('unsupported'));
       stopListening();
@@ -136,14 +138,21 @@ export function createSpeech() {
       rec.lang = lang;
       rec.interimResults = true;
       rec.continuous = false;
+      rec.maxAlternatives = 4;
+      lastAlts = [];
       let finalText = '';
       rec.onresult = (e) => {
         let interim = '';
         for (let i = e.resultIndex; i < e.results.length; i++) {
-          if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+          if (e.results[i].isFinal) {
+            finalText += e.results[i][0].transcript;
+            lastAlts = Array.from(e.results[i]).slice(1).map((a) => a.transcript);
+          }
           else interim += e.results[i][0].transcript;
         }
-        onInterim?.(finalText + interim);
+        const combined = finalText + interim;
+        onInterim?.(combined);
+        if (combined && onHesitation) onHesitation(detectHesitation(combined));
       };
       rec.onerror = (e) => {
         finish(e.error === 'no-speech' || e.error === 'aborted' ? '' : e.error);
@@ -161,5 +170,15 @@ export function createSpeech() {
     active?.abort();
   }
 
-  return { supported: !!Recognition, speak, stopSpeaking, listen, stopListening, setNeural: (n) => (neural = n || null), get neural() { return !!neural; } };
+  return {
+    supported: !!Recognition,
+    speak,
+    stopSpeaking,
+    duckSpeaking: stopSpeaking,
+    listen,
+    stopListening,
+    setNeural: (n) => (neural = n || null),
+    get neural() { return !!neural; },
+    get lastAlts() { return lastAlts; },
+  };
 }

@@ -4,6 +4,8 @@ import { classify, redactPrivate } from './sensitive.js';
 import { groupChoices, matchOption, fuzzyOption } from './choices.js';
 import { validateValue, plainYesNo, looksLikeSkip } from './audit.js';
 import { detectLanguage, language } from './language.js';
+import { FormSession, getDocumentHint, buildReviewItems, getRequiredDocumentsSummary } from './form-session.js';
+import { MetacognitiveResolver } from './metacognitive.js';
 import {
   PHRASES,
   TOOLS,
@@ -15,6 +17,7 @@ import {
   translateTextsPrompt,
   TRANSLATE_TEXTS_SCHEMA,
   translateAnswerPrompt,
+  translatePhrases,
 } from './prompts.js';
 
 const FIRST_CHUNK = 4; // small, so the first question comes quickly
@@ -43,13 +46,14 @@ const sentence = (label) => (/[?!؟。？！]$/.test(bare(label)) ? bare(label) 
 
 export class Agent {
   // page: { scan, apply, highlight, focus, fill, read }   (all async, talk to the web page)
-  // ui:   { say(text), prompt(state), filled(items), status(text), error(err) }
-  constructor({ llm, page, ui, userLang, phrases = PHRASES }) {
+  constructor({ llm, page, ui, userLang, phrases = PHRASES, sessionModel = null, autoTranslatePhrases = false }) {
     this.llm = llm;
     this.page = page;
     this.ui = ui;
     this.userLang = userLang;
     this.phrases = phrases;
+    this._customPhrases = phrases !== PHRASES;
+    this._autoTranslatePhrases = autoTranslatePhrases;
     this.fields = [];
     this.translations = new Map(); // id -> { label, explanation, options }
     this.pending = new Map(); // id -> promise resolved when its translation is in
@@ -63,17 +67,47 @@ export class Agent {
     this.formLang = '';
     this.mode = 'idle'; // idle | listen | type | done
     this.busy = false;
+    this.sessionModel = sessionModel || new FormSession();
+    this._customSessionModel = !!sessionModel;
+    this.metacognitive = new MetacognitiveResolver();
+    this.pendingConfirm = null;
+  }
+
+  static fromSchema(schema, opts = {}) {
+    const session = FormSession.fromSchema(schema);
+    const agent = new Agent({
+      ...opts,
+      page: session.toPageAdapter(),
+      sessionModel: session,
+      autoTranslatePhrases: opts.phrases ? false : true,
+    });
+    return { agent, session };
   }
 
   log(event, data) {
+    if (typeof console !== 'undefined' && console.log) {
+      if (event === 'turn') {
+        console.log(`[Fluent Agent] Turn: "${data.said}" -> calls:`, data.calls, data.reasoning ? `reasoning: ${data.reasoning}` : '');
+      } else if (event === 'fill') {
+        console.log(`[Fluent Agent] Fill: ${data.field} = "${data.value}"`);
+      } else if (event === 'spelling-confirm') {
+        console.log(`[Fluent Agent] Spelling check on ${data.field}: candidate "${data.candidate}", options:`, data.options);
+      }
+    }
     this.ui.log?.(event, data);
   }
 
   async start() {
     this.ui.status('scan');
+    if (this._autoTranslatePhrases && !this._customPhrases && this.llm && this.userLang && !/^english$/i.test(this.userLang)) {
+      this.phrases = await translatePhrases(this.llm, this.userLang);
+    }
     const scan = await this.page.scan();
     this.raw = new Map(scan.fields.map((f) => [f.id, { ...f, ...classify(f) }]));
     this.fields = groupChoices([...this.raw.values()]);
+    if (!this._customSessionModel) {
+      this.sessionModel = FormSession.fromDOM(this.fields);
+    }
     if (!this.fields.length) {
       this.setMode('idle');
       await this.ui.say(this.phrases.no_form);
@@ -96,7 +130,17 @@ export class Agent {
     this.ui.status('ready');
     await this.ui.say(this.phrases.greeting);
     const about = await overview;
-    if (about) await this.ui.say(about);
+    const docs = getRequiredDocumentsSummary(this.fields, this.userLang);
+    let docNotice = '';
+    if (docs.length > 0) {
+      const isEs = /^es|spanish|espa/i.test(String(this.userLang || ''));
+      const docTitles = docs.map((d) => d.cardTitle).join(', ');
+      docNotice = isEs
+        ? `Es útil tener a mano su ${docTitles}, o podemos omitirlo por ahora.`
+        : `It helps to have your ${docTitles} handy, or we can skip it for now.`;
+    }
+    const spokenOverview = [about, docNotice].filter(Boolean).join(' ');
+    if (spokenOverview) await this.ui.say(spokenOverview);
     await this.advance();
   }
 
@@ -149,6 +193,7 @@ export class Agent {
       for (const m of f.members || []) m.id = re(m.id);
     }
     if (this.lastFill) this.lastFill.field_id = re(this.lastFill.field_id);
+    if (this.pendingConfirm) this.pendingConfirm.fieldId = re(this.pendingConfirm.fieldId);
     await page.apply({ fields: this.fields.filter((f) => this.translations.has(f.id)).map((f) => this.pagePayload(f)) });
     if (this.current) await page.highlight(this.current.id);
     this.log('relink', { matched: idMap.size, of: incoming.length });
@@ -164,6 +209,9 @@ export class Agent {
     const grouped = groupChoices([...this.raw.values()]);
     // A group keeps its earlier object (and its translations) when its first box was already known.
     this.fields = grouped.map((f) => (before.has(f.id) && known.get(f.id)) || f);
+    if (!this._customSessionModel) {
+      this.sessionModel = FormSession.fromDOM(this.fields);
+    }
     const fresh = this.fields.filter((f) => !this.translations.has(f.id) && !before.has(f.id));
     // The page rebuilt its registry, so translations must be re-attached.
     await this.page.apply({ fields: this.fields.filter((f) => this.translations.has(f.id)).map((f) => this.pagePayload(f)) });
@@ -271,6 +319,70 @@ export class Agent {
     return newSection ? `${sentence(t.section)} ${label}` : label;
   }
 
+  _syncSession() {
+    this.sessionModel.syncState({
+      filled: this.filled,
+      skipped: this.skipped,
+      values: this.values,
+      translations: this.translations,
+      groupedFields: this.fields,
+    });
+  }
+
+  getMilestones() {
+    this._syncSession();
+    return this.sessionModel.getMilestones();
+  }
+
+  getCurrentMilestone() {
+    this._syncSession();
+    return this.sessionModel.getCurrentMilestone(this.current?.id);
+  }
+
+  getDocumentHint(field = this.current) {
+    return getDocumentHint(field, this.userLang);
+  }
+
+  getReviewSummary() {
+    const isEs = /^es|spanish|espa/i.test(String(this.userLang || ''));
+    return buildReviewItems({
+      fields: this.fields,
+      values: this.values,
+      filled: this.filled,
+      skipped: this.skipped,
+      translations: this.translations,
+      typedPrivateLabel: this.phrases.typed_private,
+      skippedLabel: isEs ? 'omitido' : 'skipped',
+    });
+  }
+
+  async editField(fieldId) {
+    const field = this.fields.find((f) => f.id === fieldId);
+    if (!field || this.busy) return;
+    this.pendingConfirm = null;
+    this.skipped.delete(field.id);
+    this.filled.delete(field.id);
+    await this.advance(field);
+  }
+
+  async setUserLanguage(userLang, phrases = this.phrases) {
+    if (!userLang || userLang === this.userLang) return;
+    this.userLang = userLang;
+    this.phrases = { ...PHRASES, ...phrases };
+    this.pendingConfirm = null;
+    this.lastSection = '';
+    this.sameLanguage = language(this.formLang)?.code === language(this.userLang)?.code;
+    this.ui.language?.(this.formLang, this.sameLanguage);
+    this.translations.clear();
+    this.translating = this.translateAll(this.fields, []);
+    if (this.current) {
+      await this.advance(this.current);
+    } else if (this.mode === 'done') {
+      await this.translating;
+      this.setMode('done');
+    }
+  }
+
   setMode(mode) {
     this.mode = mode;
     const f = this.current;
@@ -278,6 +390,9 @@ export class Agent {
       mode,
       field: f ? { id: f.id, label: this.tr(f).label, sensitive: f.sensitive, long: f.long } : null,
       canTranslate: mode === 'type' && !!f && f.long && !f.sensitive && !this.sameLanguage,
+      milestone: this.getCurrentMilestone(),
+      documentHint: mode !== 'done' ? this.getDocumentHint(f) : null,
+      review: mode === 'done' ? this.getReviewSummary() : null,
     });
   }
 
@@ -295,15 +410,17 @@ export class Agent {
     const parts = [];
     if (t.question) {
       // Conversational: a natural question, with the section named when it changes.
-      if (t.section && field.section !== this.lastSection) parts.push(sentence(t.section));
+      const newSection = t.section && field.section !== this.lastSection;
       this.lastSection = field.section;
-      parts.push(t.question);
+      parts.push(newSection ? `${(this.phrases.next_section || 'Next, for {section}:').replace('{section}', bare(t.section))} ${t.question}` : t.question);
     } else {
       parts.push(this.spokenLabel(field));
       if (t.explanation) parts.push(t.explanation);
       if (field.kind === 'checkbox') parts.push(this.phrases.checkbox);
     }
     if (field.kind !== 'checkbox' && t.options.length && t.options.length <= MAX_SPOKEN_OPTIONS) parts.push(`${this.phrases.options}: ${t.options.join(', ')}.`);
+    const docHint = this.getDocumentHint(field);
+    if (docHint?.whereToLook) parts.push(docHint.whereToLook);
     // Said once, not after every question.
     if (!field.required && !this.saidSkipHint) {
       this.saidSkipHint = true;
@@ -314,6 +431,9 @@ export class Agent {
 
   async advance(target = null) {
     const next = target || this.nextField();
+    if (this.pendingConfirm && this.pendingConfirm.fieldId !== next?.id) {
+      this.pendingConfirm = null;
+    }
     this.current = next;
     if (!next) {
       // A long PDF: carry on with the next page that has fields before calling it done.
@@ -333,7 +453,9 @@ export class Agent {
     if (next.sensitive || next.long) {
       await this.page.focus(next.id);
       this.setMode('type');
-      this.lastSpoken = `${this.spokenLabel(next)} ${next.sensitive ? this.phrases.type_private : this.phrases.type_long}`;
+      const docHint = this.getDocumentHint(next);
+      const hintSuffix = docHint?.whereToLook ? ` ${docHint.whereToLook}` : '';
+      this.lastSpoken = `${this.spokenLabel(next)} ${next.sensitive ? this.phrases.type_private : this.phrases.type_long}${hintSuffix}`;
       await this.ui.say(this.lastSpoken);
     } else {
       this.setMode('listen');
@@ -357,7 +479,7 @@ export class Agent {
     };
     const recent = new Set([...this.values.keys()].slice(-5));
     return {
-      current: cur ? { ...brief(cur), asks: this.tr(cur).explanation || undefined } : null,
+      current: cur ? { ...brief(cur), asks: this.tr(cur).explanation || undefined, question: this.tr(cur).question || undefined } : null,
       open: this.fields.filter((f) => f !== cur && !this.filled.has(f.id) && !this.skipped.has(f.id)).slice(0, 8).map(brief),
       answered: this.fields
         .filter((f) => this.filled.has(f.id))
@@ -409,6 +531,26 @@ export class Agent {
     }
     // Pasted details may hold a private number: the model never sees it.
     const { text: said, redacted } = redactPrivate(text);
+    if (this.pendingConfirm && this.current && this.pendingConfirm.fieldId === this.current.id) {
+      const pending = this.pendingConfirm;
+      this.pendingConfirm = null;
+      const resolved = this.metacognitive.resolveConfirmation(pending, said);
+      if (resolved.resolved) {
+        const field = this.current;
+        const r = await this.fillField(field, String(resolved.value));
+        if (r?.ok) {
+          this.filled.add(field.id);
+          this.skipped.delete(field.id);
+          this.values.set(field.id, r.value);
+          const item = { id: field.id, label: this.tr(field).label, original: field.label, value: r.value, shown: this.shownValue(field, r.value) };
+          this.ui.filled([item]);
+          this.log('fill', { field: field.label, value: r.value, confirmed: true });
+          this.lastFill = { field_id: field.id, label: field.label, value: r.value };
+          this.history.push(`- User confirmed spelling "${said}"; you wrote ${field.label} = "${r.value}".`);
+          return this.advance();
+        }
+      }
+    }
     // Other things the speech recogniser thought it heard (if it said so), best first.
     const alts = (meta.alts || []).map((a) => redactPrivate(a).text).filter((a) => a && a.toLowerCase() !== said.toLowerCase()).slice(0, 3);
     // A short answer to a choice question is matched in code, by meaning and by sound ("mail" -> "Male"), before the model is asked.
@@ -486,8 +628,29 @@ export class Agent {
             }
             value = check.value;
           }
+          if (!copy) {
+            const spell = this.metacognitive.assessSpelling(field, String(value), {
+              said,
+              alternatives: alts,
+              lang: language(this.userLang)?.code || this.userLang,
+            });
+            if (spell.needsConfirmation) {
+              this.pendingConfirm = {
+                fieldId: field.id,
+                candidate: spell.candidate,
+                options: spell.options,
+                baseOptions: spell.baseOptions,
+              };
+              this.log('spelling-confirm', { field: field.label, candidate: spell.candidate, options: spell.options });
+              this.pendingPrompt = spell.prompt;
+              spoken.push(spell.prompt);
+              continue;
+            }
+            value = spell.value;
+          }
           const r = await this.fillField(field, String(value));
           if (!r?.ok) continue;
+          if (this.pendingConfirm?.fieldId === field.id) this.pendingConfirm = null;
           this.filled.add(field.id);
           this.skipped.delete(field.id);
           this.skipStreak = { group: '', n: 0 };
@@ -536,7 +699,24 @@ export class Agent {
     }
     if (refusedPrivate) await this.ui.say(this.phrases.private_refused);
     else if (redacted) await this.ui.say(this.phrases.redacted);
-    for (const s of spoken) await this.ui.say(s);
+    // A spelling check is the only thing said: the other lines would bury the question.
+    const confirmPrompt = this.pendingConfirm ? spoken.find((s) => s === this.pendingPrompt) : '';
+    for (const s of confirmPrompt ? [confirmPrompt] : spoken) await this.ui.say(s);
+
+    if (this.pendingConfirm) {
+      const confirmField = this.fields.find((f) => f.id === this.pendingConfirm.fieldId);
+      if (confirmField) {
+        this.current = confirmField;
+        const confirmPrompt = spoken.find((s) => s.includes('?') || s.length > 5);
+        if (confirmPrompt) {
+          this.lastAsked = confirmPrompt;
+          this.lastSpoken = confirmPrompt;
+        }
+        this.setMode('listen');
+        return;
+      }
+    }
+
     // Reading things out is not an answer: carry on with the question that is waiting.
     if (progressed || (info && this.mode !== 'done')) return this.advance(target);
     if (reply) {
@@ -578,6 +758,7 @@ export class Agent {
         this.filled.delete(field.id);
         this.skipped.delete(field.id);
         this.values.delete(field.id);
+        if (this.pendingConfirm?.fieldId === field.id) this.pendingConfirm = null;
         const reopen = field === cur || this.mode === 'done'; // ask it again right away
         return { say: `${this.phrases.cleared} ${label(field)}.`, target: reopen ? field : null, handled: this.mode === 'done', info: true, log: `you cleared ${field.label}` };
       }
