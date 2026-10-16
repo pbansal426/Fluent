@@ -122,3 +122,15 @@ test('splitSentences avoids breaking on abbreviations, box numbers and decimals'
     'Can you pay now?',
   ]);
 });
+
+test('spokenText expands ISO dates into natural spoken words', () => {
+  assert.equal(spokenText('Date of birth: 1990-05-05', 'en'), 'Date of birth: May 5th, 1990');
+  assert.equal(spokenText('Fecha: 1990-05-05', 'es'), 'Fecha: 5 de mayo de 1990');
+});
+
+test('spokenText expands street abbreviations and acronym phonetics', () => {
+  assert.equal(spokenText('123 Elm St. Apt. 4B', 'en'), '123 Elm Street Apartment 4B');
+  assert.equal(spokenText('123 Calle Norte Apt. 4B', 'es'), '123 Calle Norte Apartamento 4B');
+  assert.equal(spokenText('Enter your SSN and EIN', 'en'), 'Enter your S-S-N and E-I-N');
+});
+
