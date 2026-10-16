@@ -59,7 +59,18 @@ const VARIANT_GROUPS = [
       return null;
     },
   },
+  {
+    options: ['Shawn', 'Sean'],
+    prompt: (lang) => (lang === 'es' ? '¿Se escribe Shawn con S-H-A-W-N o Sean con S-E-A-N?' : 'Got it — is that Shawn (S-H-A-W-N) or Sean (S-E-A-N)?'),
+    resolveRule: (said) => {
+      if (/\b(shawn|with a w|con w|s[\s-]*h[\s-]*a[\s-]*w[\s-]*n)\b/i.test(said)) return 'Shawn';
+      if (/\b(sean|with ea|con e|s[\s-]*e[\s-]*a[\s-]*n)\b/i.test(said)) return 'Sean';
+      return null;
+    },
+  },
 ];
+
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export class MetacognitiveResolver {
   isNameField(field) {
@@ -67,11 +78,17 @@ export class MetacognitiveResolver {
     return NAME_FIELD.test(label) && !NOT_PERSON_NAME.test(label);
   }
 
+  isEmailField(field) {
+    if (!field) return false;
+    if (field.inputType === 'email') return true;
+    return /\b(e-?mail|correo\s+electr[oó]nico|correo)\b/i.test(String(field.label || ''));
+  }
+
   normalizeSpelledWord(input) {
     if (!input || typeof input !== 'string') return '';
     const cleaned = input.replace(/\b(?:as in|like|como en|de)\s+[A-Za-zÀ-ÿ]+/gi, ' ');
     const tokens = cleaned.split(/[\s,.-]+/).filter(Boolean);
-    if (tokens.length >= 2 && tokens.every((t) => /^[A-Za-z]$/.test(t))) {
+    if (tokens.length >= 2 && tokens.every((t) => /^[A-Za-zÀ-ÿ]$/.test(t))) {
       const joined = tokens.join('');
       return joined.charAt(0).toUpperCase() + joined.slice(1).toLowerCase();
     }
@@ -92,7 +109,21 @@ export class MetacognitiveResolver {
 
   assessSpelling(field, value, { said = '', alternatives = [], lang = 'en' } = {}) {
     const cleanValue = String(value || '').trim();
-    if (!cleanValue || !this.isNameField(field)) {
+    if (!cleanValue) {
+      return { needsConfirmation: false, value: cleanValue };
+    }
+
+    if (this.isEmailField(field)) {
+      if (/\b(at|arroba|dot|punto)\b/i.test(cleanValue)) {
+        return { needsConfirmation: false, value: this.normalizeEmail(cleanValue) };
+      }
+      if (!cleanValue.includes('@') && /\b(at|arroba)\b/i.test(said)) {
+        return { needsConfirmation: false, value: this.normalizeEmail(said) };
+      }
+      return { needsConfirmation: false, value: cleanValue };
+    }
+
+    if (!this.isNameField(field)) {
       return { needsConfirmation: false, value: cleanValue };
     }
 
@@ -101,21 +132,26 @@ export class MetacognitiveResolver {
       return { needsConfirmation: false, value: spelled };
     }
 
-    const lowerVal = cleanValue.toLowerCase();
-    const lowerAlts = (alternatives || []).map((a) => String(a || '').trim().toLowerCase());
+    const words = cleanValue.split(/\s+/);
+    const firstWordLower = words[0].toLowerCase();
+    const restWords = words.slice(1).join(' ');
+    const withRest = (w) => (restWords ? `${w} ${restWords}` : w);
+
+    const lowerAlts = (alternatives || []).map((a) => String(a || '').trim().split(/\s+/)[0].toLowerCase());
     const langCode = /^es|spanish|espa/i.test(String(lang || '')) ? 'es' : 'en';
 
     for (const group of VARIANT_GROUPS) {
       const lowerOpts = group.options.map((o) => o.toLowerCase());
-      if (lowerOpts.includes(lowerVal) || lowerAlts.some((a) => lowerOpts.includes(a))) {
+      if (lowerOpts.includes(firstWordLower) || lowerAlts.some((a) => lowerOpts.includes(a))) {
         const alreadyDisambiguated = group.resolveRule(said);
         if (alreadyDisambiguated) {
-          return { needsConfirmation: false, value: alreadyDisambiguated };
+          return { needsConfirmation: false, value: withRest(alreadyDisambiguated) };
         }
         return {
           needsConfirmation: true,
           variantType: 'name_split',
-          options: [...group.options],
+          options: group.options.map((o) => withRest(o)),
+          baseOptions: [...group.options],
           prompt: group.prompt(langCode),
           candidate: cleanValue,
           value: cleanValue,
@@ -132,21 +168,35 @@ export class MetacognitiveResolver {
     }
     const text = String(reply).trim();
     const spelled = this.normalizeSpelledWord(text);
-    for (const opt of pending.options) {
-      if (spelled.toLowerCase() === opt.toLowerCase() || text.toLowerCase() === opt.toLowerCase()) {
+    const baseOptions = pending.baseOptions || pending.options.map((o) => String(o).split(/\s+/)[0]);
+
+    for (let i = 0; i < pending.options.length; i++) {
+      const opt = pending.options[i];
+      const baseOpt = baseOptions[i] || opt;
+      if (
+        spelled.toLowerCase() === opt.toLowerCase() ||
+        spelled.toLowerCase() === baseOpt.toLowerCase() ||
+        text.toLowerCase() === opt.toLowerCase() ||
+        text.toLowerCase() === baseOpt.toLowerCase()
+      ) {
         return { resolved: true, value: opt };
       }
     }
 
     for (const group of VARIANT_GROUPS) {
-      if (group.options[0] === pending.options[0]) {
+      if (group.options.some((opt) => baseOptions.includes(opt))) {
         const hit = group.resolveRule(text);
-        if (hit) return { resolved: true, value: hit };
+        if (hit) {
+          const idx = baseOptions.findIndex((b) => b.toLowerCase() === hit.toLowerCase());
+          return { resolved: true, value: idx >= 0 ? pending.options[idx] : hit };
+        }
       }
     }
 
-    for (const opt of pending.options) {
-      const re = new RegExp(`\\b${opt}\\b`, 'i');
+    for (let i = 0; i < pending.options.length; i++) {
+      const opt = pending.options[i];
+      const baseOpt = baseOptions[i] || opt;
+      const re = new RegExp(`\\b(?:${escapeRegex(opt)}|${escapeRegex(baseOpt)})\\b`, 'i');
       if (re.test(text)) return { resolved: true, value: opt };
     }
 

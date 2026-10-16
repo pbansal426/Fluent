@@ -219,6 +219,8 @@ export class FormSession {
 
   markSkipped(id) {
     if (!this._fields.has(id)) return;
+    this._filled.delete(id);
+    this._values.delete(id);
     this._skipped.add(id);
   }
 
@@ -230,6 +232,46 @@ export class FormSession {
 
   getValue(id) {
     return this._values.get(id) ?? null;
+  }
+
+  toPageAdapter() {
+    return {
+      scan: async () => ({
+        fields: this.getFields().map((f) => ({
+          inputType: 'text',
+          name: '',
+          htmlId: '',
+          autocomplete: '',
+          placeholder: '',
+          helpText: '',
+          required: false,
+          maxLength: 0,
+          options: [],
+          value: this.getValue(f.id) || '',
+          ...f,
+        })),
+        texts: [],
+        pageLang: this._metadata?.lang || 'en',
+      }),
+      apply: async () => ({ ok: true }),
+      highlight: async () => ({ ok: true }),
+      focus: async () => ({ ok: true }),
+      fill: async (id, value) => {
+        const f = this.getField(id);
+        if (!f) return { ok: false, error: 'not_found' };
+        const str = String(value ?? '');
+        if (str === '') {
+          this.clearField(id);
+          return { ok: true, value: '' };
+        }
+        if (Array.isArray(f.options) && f.options.length && !f.options.includes(str)) {
+          return { ok: false, error: 'invalid_option' };
+        }
+        this.setValue(id, str);
+        return { ok: true, value: str };
+      },
+      read: async (id) => ({ ok: true, value: this.getValue(id) || '' }),
+    };
   }
 
   syncState({ filled = new Set(), skipped = new Set(), values = new Map(), translations = new Map() } = {}) {

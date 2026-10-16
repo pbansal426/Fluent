@@ -128,3 +128,38 @@ test('buildReviewItems creates bilingual review entries and masks sensitive fiel
   assert.equal(review[2].value, '');
   assert.equal(review[2].shownValue, 'typed by you, kept private');
 });
+
+test('FormSession.markSkipped enforces state exclusivity and toPageAdapter supports headless/telephony sessions', async () => {
+  const session = FormSession.fromSchema({
+    title: 'Phone Intake',
+    sections: [
+      {
+        id: 'sec1',
+        title: 'Caller Info',
+        fields: [
+          { id: 'name', label: 'Caller Name', kind: 'text', required: true },
+          { id: 'plan', label: 'Plan Tier', kind: 'select', options: ['Basic', 'Plus'] },
+        ],
+      },
+    ],
+  });
+
+  const page = session.toPageAdapter();
+  const scanned = await page.scan();
+  assert.equal(scanned.fields.length, 2);
+
+  const filled = await page.fill('name', 'Elena');
+  assert.equal(filled.ok, true);
+  assert.equal((await page.read('name')).value, 'Elena');
+
+  const badOpt = await page.fill('plan', 'Invalid');
+  assert.equal(badOpt.ok, false);
+
+  const goodOpt = await page.fill('plan', 'Plus');
+  assert.equal(goodOpt.ok, true);
+
+  session.markSkipped('name');
+  assert.equal(session.getValue('name'), null);
+  assert.equal(session.isComplete(), false);
+});
+

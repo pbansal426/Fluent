@@ -48,11 +48,33 @@ test('MetacognitiveResolver resolves follow-up confirmation replies cleanly', ()
   assert.deepEqual(resolver.resolveConfirmation(saraPending, 'sin h'), { resolved: true, value: 'Sara' });
 });
 
-test('MetacognitiveResolver normalizes spelled words (including NATO phonetics) and spoken emails', () => {
+test('MetacognitiveResolver normalizes spelled words (including NATO phonetics and accents) and spoken emails', () => {
   const resolver = new MetacognitiveResolver();
 
   assert.equal(resolver.normalizeSpelledWord('S M I T H'), 'Smith');
   assert.equal(resolver.normalizeSpelledWord('B as in Boy, R, Y, A, N'), 'Bryan');
+  assert.equal(resolver.normalizeSpelledWord('J O S É'), 'José');
   assert.equal(resolver.normalizeEmail('john dot doe at gmail dot com'), 'john.doe@gmail.com');
   assert.equal(resolver.normalizeEmail('maria underscore lopez at yahoo dot com'), 'maria_lopez@yahoo.com');
+
+  const emailField = { id: 'email', label: 'Email address', kind: 'text', inputType: 'email' };
+  const emailRes = resolver.assessSpelling(emailField, 'john dot doe at gmail dot com', { said: 'john dot doe at gmail dot com' });
+  assert.equal(emailRes.needsConfirmation, false);
+  assert.equal(emailRes.value, 'john.doe@gmail.com');
 });
+
+test('MetacognitiveResolver handles multi-word full names and preserves surnames upon confirmation', () => {
+  const resolver = new MetacognitiveResolver();
+  const fullField = { id: 'full_name', label: 'Full legal name', kind: 'text' };
+
+  const res = resolver.assessSpelling(fullField, 'Bryan Lopez', { said: 'Bryan Lopez', alternatives: ['Brian Lopez'], lang: 'en' });
+  assert.equal(res.needsConfirmation, true);
+  assert.deepEqual(res.options, ['Bryan Lopez', 'Brian Lopez']);
+
+  const resolved = resolver.resolveConfirmation(
+    { fieldId: 'full_name', candidate: 'Bryan Lopez', options: res.options, baseOptions: res.baseOptions },
+    'with an I'
+  );
+  assert.deepEqual(resolved, { resolved: true, value: 'Brian Lopez' });
+});
+
