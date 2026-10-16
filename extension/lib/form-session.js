@@ -274,11 +274,40 @@ export class FormSession {
     };
   }
 
-  syncState({ filled = new Set(), skipped = new Set(), values = new Map(), translations = new Map() } = {}) {
+  syncState({ filled = new Set(), skipped = new Set(), values = new Map(), translations = new Map(), groupedFields = [] } = {}) {
     this._filled = new Set(filled);
     this._skipped = new Set(skipped);
-    this._values = new Map(values);
+    this._values = new Map();
+    for (const [k, v] of values.entries()) {
+      const f = this._fields.get(k);
+      if (f && !f.sensitive) this._values.set(k, String(v));
+    }
     this._translations = translations;
+    for (const gf of groupedFields) {
+      if (!Array.isArray(gf.members) || !gf.members.length) continue;
+      if (this._filled.has(gf.id)) {
+        const chosenOpt = values.get(gf.id);
+        for (const m of gf.members) {
+          this._filled.add(m.id);
+          this._skipped.delete(m.id);
+          if (chosenOpt !== undefined) {
+            this._values.set(m.id, m.option === chosenOpt ? 'true' : 'false');
+          }
+        }
+      } else if (this._skipped.has(gf.id)) {
+        for (const m of gf.members) {
+          this._skipped.add(m.id);
+          this._filled.delete(m.id);
+          this._values.delete(m.id);
+        }
+      } else {
+        for (const m of gf.members) {
+          this._filled.delete(m.id);
+          this._skipped.delete(m.id);
+          this._values.delete(m.id);
+        }
+      }
+    }
   }
 
   getMilestones() {

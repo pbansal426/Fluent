@@ -164,6 +164,7 @@ export class Agent {
       for (const m of f.members || []) m.id = re(m.id);
     }
     if (this.lastFill) this.lastFill.field_id = re(this.lastFill.field_id);
+    if (this.pendingConfirm) this.pendingConfirm.fieldId = re(this.pendingConfirm.fieldId);
     await page.apply({ fields: this.fields.filter((f) => this.translations.has(f.id)).map((f) => this.pagePayload(f)) });
     if (this.current) await page.highlight(this.current.id);
     this.log('relink', { matched: idMap.size, of: incoming.length });
@@ -295,6 +296,7 @@ export class Agent {
       skipped: this.skipped,
       values: this.values,
       translations: this.translations,
+      groupedFields: this.fields,
     });
   }
 
@@ -615,6 +617,7 @@ export class Agent {
           }
           const r = await this.fillField(field, String(value));
           if (!r?.ok) continue;
+          if (this.pendingConfirm?.fieldId === field.id) this.pendingConfirm = null;
           this.filled.add(field.id);
           this.skipped.delete(field.id);
           this.skipStreak = { group: '', n: 0 };
@@ -705,6 +708,7 @@ export class Agent {
         this.filled.delete(field.id);
         this.skipped.delete(field.id);
         this.values.delete(field.id);
+        if (this.pendingConfirm?.fieldId === field.id) this.pendingConfirm = null;
         const reopen = field === cur || this.mode === 'done'; // ask it again right away
         return { say: `${this.phrases.cleared} ${label(field)}.`, target: reopen ? field : null, handled: this.mode === 'done', info: true, log: `you cleared ${field.label}` };
       }

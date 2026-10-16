@@ -133,24 +133,31 @@ export class MetacognitiveResolver {
     }
 
     const words = cleanValue.split(/\s+/);
-    const firstWordLower = words[0].toLowerCase();
-    const restWords = words.slice(1).join(' ');
-    const withRest = (w) => (restWords ? `${w} ${restWords}` : w);
-
-    const lowerAlts = (alternatives || []).map((a) => String(a || '').trim().split(/\s+/)[0].toLowerCase());
+    const lowerWords = words.map((w) => w.toLowerCase());
+    const lowerAltTokens = new Set(
+      (alternatives || [])
+        .flatMap((a) => String(a || '').trim().split(/\s+/))
+        .filter(Boolean)
+        .map((t) => t.toLowerCase())
+    );
     const langCode = /^es|spanish|espa/i.test(String(lang || '')) ? 'es' : 'en';
 
     for (const group of VARIANT_GROUPS) {
       const lowerOpts = group.options.map((o) => o.toLowerCase());
-      if (lowerOpts.includes(firstWordLower) || lowerAlts.some((a) => lowerOpts.includes(a))) {
+      let matchIdx = lowerWords.findIndex((w) => lowerOpts.includes(w));
+      if (matchIdx < 0 && lowerOpts.some((o) => lowerAltTokens.has(o))) {
+        matchIdx = 0;
+      }
+      if (matchIdx >= 0) {
+        const replaceAt = (replacement) => words.map((w, idx) => (idx === matchIdx ? replacement : w)).join(' ');
         const alreadyDisambiguated = group.resolveRule(said);
         if (alreadyDisambiguated) {
-          return { needsConfirmation: false, value: withRest(alreadyDisambiguated) };
+          return { needsConfirmation: false, value: replaceAt(alreadyDisambiguated) };
         }
         return {
           needsConfirmation: true,
           variantType: 'name_split',
-          options: group.options.map((o) => withRest(o)),
+          options: group.options.map((o) => replaceAt(o)),
           baseOptions: [...group.options],
           prompt: group.prompt(langCode),
           candidate: cleanValue,

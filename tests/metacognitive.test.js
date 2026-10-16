@@ -76,5 +76,15 @@ test('MetacognitiveResolver handles multi-word full names and preserves surnames
     'with an I'
   );
   assert.deepEqual(resolved, { resolved: true, value: 'Brian Lopez' });
+
+  // Also detects homophones in middle or last name position of a multi-word name
+  const resMiddle = resolver.assessSpelling(fullField, 'Maria Sara Lopez', { said: 'Maria Sara Lopez', alternatives: ['Maria Sarah Lopez'], lang: 'es' });
+  assert.equal(resMiddle.needsConfirmation, true);
+  assert.deepEqual(resMiddle.options, ['Maria Sarah Lopez', 'Maria Sara Lopez']);
+  const resolvedMiddle = resolver.resolveConfirmation(
+    { fieldId: 'full_name', candidate: 'Maria Sara Lopez', options: resMiddle.options, baseOptions: resMiddle.baseOptions },
+    'con H'
+  );
+  assert.deepEqual(resolvedMiddle, { resolved: true, value: 'Maria Sarah Lopez' });
 });
 

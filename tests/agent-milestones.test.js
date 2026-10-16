@@ -180,3 +180,31 @@ test('Agent clears stale pendingConfirm if user skips field, and refreshes revie
   assert.equal(log.prompts.at(-1).review.length, 2);
 });
 
+test('Agent.fromSchema synchronizes grouped checkbox choices back to milestone completion', async () => {
+  const schema = {
+    title: 'Eligibility Check',
+    sections: [
+      {
+        id: 'elig',
+        title: 'Eligibility',
+        fields: [
+          { id: 'c_yes', label: 'Are you over 18?: Select Yes', kind: 'checkbox', required: true },
+          { id: 'c_no', label: 'Are you over 18?: Select No', kind: 'checkbox', required: true },
+        ],
+      },
+    ],
+  };
+  const { llm, ui } = createTestRig([], []);
+  const { agent, session } = Agent.fromSchema(schema, { llm, ui, userLang: 'English' });
+
+  await agent.start();
+  assert.equal(agent.fields.length, 1);
+  assert.equal(agent.getCurrentMilestone().completed, false);
+
+  await agent.handleUser('yes');
+  assert.equal(agent.mode, 'done');
+  assert.equal(agent.getMilestones()[0].completed, true);
+  assert.equal(session.getValue('c_yes'), 'true');
+  assert.equal(session.getValue('c_no'), 'false');
+});
+
