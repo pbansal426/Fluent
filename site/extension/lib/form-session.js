@@ -8,7 +8,7 @@ const sectionNameOf = (f) => (f?.section && f.section.trim()) || headingOf(f) ||
 const DOCUMENT_HINTS = [
   {
     id: 'insurance_group',
-    match: /\b(group\s*(number|no|id|#)|rx\s*grp|n[uú]mero\s+de\s+grupo)\b/i,
+    match: /\b(group\s*(number|no|id|#)|rx\s*grp|(id|n[uú]mero)\s+de\s+grupo|c[oó]digo\s+de\s+grupo)\b/i,
     sampleCode: 'GRP: 748291',
     highlightZone: 'bottom-left',
     en: {
@@ -22,7 +22,7 @@ const DOCUMENT_HINTS = [
   },
   {
     id: 'insurance_member',
-    match: /\b(member\s*id|policy\s*(number|no|#)|subscriber\s*id|id\s+de\s+miembro|n[uú]mero\s+de\s+p[oó]liza)\b/i,
+    match: /\b(member\s*id|policy\s*(number|no|#)|subscriber\s*id|(id|n[uú]mero(\s+de\s+identificaci[oó]n)?)\s+de\s+miembro|identificaci[oó]n\s+de\s+miembro|n[uú]mero\s+de\s+p[oó]liza|n[uú]mero\s+de\s+afiliado|n[uú]mero\s+de\s+asociado)\b/i,
     sampleCode: 'ID: W98234102',
     highlightZone: 'center-left',
     en: {
@@ -36,7 +36,7 @@ const DOCUMENT_HINTS = [
   },
   {
     id: 'rx_bin',
-    match: /\b(rx\s*bin|rx\s*pcn|bin\s*number)\b/i,
+    match: /\b(rx\s*bin|rx\s*pcn|bin\s*(number|no|#))\b/i,
     sampleCode: 'RxBIN: 610014',
     highlightZone: 'bottom-right',
     en: {
@@ -78,7 +78,7 @@ const DOCUMENT_HINTS = [
   },
   {
     id: 'passport_number',
-    match: /\b(passport|pasaporte)\b/i,
+    match: /\b(passport(\s*(number|no|#))?|pasaporte|n[uú]mero\s+de\s+pasaporte)\b/i,
     sampleCode: 'P: 123456789',
     highlightZone: 'top-right',
     en: {
@@ -106,7 +106,7 @@ const DOCUMENT_HINTS = [
   },
   {
     id: 'drivers_license',
-    match: /\b(driver'?s?\s*licen[sc]e|driving\s+licen[sc]e|dl\s*(number|no|#)|licencia\s+de\s+(conducir|manejar)|licencia\s+de\s+conductor)\b/i,
+    match: /\b(driver'?s?\s*licen[sc]e|driving\s+licen[sc]e|dl\s*(number|no|#)|(n[uú]mero\s+de\s+)?licencia\s+de\s+(conducir|manejar|conductor))\b/i,
     sampleCode: 'DL: D1234567',
     highlightZone: 'top-right',
     en: {
@@ -122,9 +122,11 @@ const DOCUMENT_HINTS = [
 
 export function getDocumentHint(field, userLang = 'English') {
   if (!field) return null;
-  const text = `${field.label || ''} ${field.name || ''} ${field.htmlId || ''}`.trim();
-  if (!text) return null;
-  const hit = DOCUMENT_HINTS.find((h) => h.match.test(text));
+  const raw = `${field.label || ''} ${field.name || ''} ${field.htmlId || ''}`.trim();
+  if (!raw) return null;
+  // Replace snake_case / kebab-case delimiters with spaces to allow clean word-boundary matches
+  const text = raw.replace(/[_.-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const hit = DOCUMENT_HINTS.find((h) => h.match.test(text) || h.match.test(raw));
   if (!hit) return null;
   const isEs = /^es|spanish|espa/i.test(String(userLang || ''));
   const copy = isEs ? hit.es : hit.en;

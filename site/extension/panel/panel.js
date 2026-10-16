@@ -7,7 +7,7 @@ import { createLive } from '../lib/live.js';
 import { detectProvider, pickModel } from '../lib/providers.js';
 import { createLog } from '../lib/log.js';
 import { createNeuralTts } from '../lib/neural-tts.js';
-import { renderMilestoneText, generateDocumentHintHtml, generateBilingualReviewHtml } from './review-card.js';
+import { renderMilestoneText, renderMilestoneHtml, generateDocumentHintHtml, generateBilingualReviewHtml } from './review-card.js';
 
 // Shown at the bottom of the panel, so it is obvious which copy of the extension is running.
 const BUILD = '2026-10-03.17';
@@ -123,11 +123,55 @@ function banner(text, kind = 'error') {
   $('banner').className = kind === 'info' ? 'info' : '';
 }
 
-function bubble(kind, text) {
+function bubble(kind, text, options = {}) {
   const b = document.createElement('div');
   b.className = `bubble ${kind}`;
   b.dir = 'auto';
-  b.textContent = text;
+
+  if (text) {
+    const textSpan = document.createElement('span');
+    textSpan.className = 'bubble-text';
+    textSpan.textContent = text;
+    b.appendChild(textSpan);
+  }
+
+  if (Array.isArray(options?.chips) && options.chips.length) {
+    const chipsWrap = document.createElement('div');
+    chipsWrap.className = 'msg-chips';
+    for (const c of options.chips) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chip';
+      btn.textContent = c.label || c.value;
+      btn.dataset.val = c.value || c.label;
+      btn.dataset.action = c.action || 'send';
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        chipsWrap.classList.add('disabled');
+        for (const sibling of chipsWrap.querySelectorAll('button')) sibling.disabled = true;
+        if (c.action === 'edit') {
+          act(() => {
+            if (c.value) {
+              const f = state.agent?.findField?.(c.value);
+              if (f) state.agent.advance(f);
+            }
+            $('text')?.focus();
+          });
+        } else if (c.action === 'confirm') {
+          btn.classList.add('chip-selected');
+        } else {
+          const val = c.value || c.label;
+          bubble('user', val);
+          act(async () => {
+            if (state.agent) await state.agent.handleUser(val);
+          });
+        }
+      });
+      chipsWrap.appendChild(btn);
+    }
+    b.appendChild(chipsWrap);
+  }
+
   // Keep the "working…" dots at the bottom.
   const thinking = kind === 'thinking' ? null : $('transcript').querySelector('.thinking');
   $('transcript').insertBefore(b, thinking);
@@ -149,6 +193,31 @@ function filledBubble(items) {
     row.append(strong, ` ${it.shown ?? it.value} `, orig);
     b.appendChild(row);
   }
+  const isEs = /^es|spanish|espa/i.test(String(lang().code || ''));
+  const lastItem = items[items.length - 1];
+  const confirmChips = document.createElement('div');
+  confirmChips.className = 'msg-chips auto-fade';
+  const goodBtn = document.createElement('button');
+  goodBtn.type = 'button';
+  goodBtn.className = 'chip';
+  goodBtn.textContent = isEs ? '✓ Se ve bien' : '✓ Looks good';
+  goodBtn.addEventListener('click', () => {
+    confirmChips.remove();
+  });
+  const editBtn = document.createElement('button');
+  editBtn.type = 'button';
+  editBtn.className = 'chip';
+  editBtn.textContent = isEs ? '✎ Editar' : '✎ Edit';
+  editBtn.addEventListener('click', () => {
+    confirmChips.remove();
+    act(() => {
+      const f = state.agent?.findField?.(lastItem?.id);
+      if (f) state.agent.advance(f);
+      $('text')?.focus();
+    });
+  });
+  confirmChips.append(goodBtn, editBtn);
+  b.appendChild(confirmChips);
 }
 
 function render() {
@@ -165,10 +234,10 @@ function render() {
   $('start').textContent = lang().start;
   document.documentElement.lang = lang().code;
 
-  const milestoneText = started && state.mode !== 'done' ? renderMilestoneText(state.milestone, lang().code) : '';
+  const milestoneHtml = started && state.mode !== 'done' ? renderMilestoneHtml(state.milestone, lang().code) : '';
   if ($('milestone-bar')) {
-    $('milestone-bar').hidden = !milestoneText;
-    $('milestone-bar').textContent = milestoneText;
+    $('milestone-bar').hidden = !milestoneHtml;
+    $('milestone-bar').innerHTML = milestoneHtml;
   }
   if ($('doc-hint-card')) {
     const hintHtml = started && state.mode !== 'done' ? generateDocumentHintHtml(state.documentHint) : '';
@@ -308,8 +377,8 @@ const ui = {
     $('form-language').textContent = `Form language: ${name}`;
     $('show-tr').parentElement.hidden = sameLanguage;
   },
-  async say(text) {
-    bubble('agent', text);
+  async say(text, options = {}) {
+    bubble('agent', text, options);
     log('say', { text, spoken: state.settings.speak && !state.skipSpeech && !state.away });
     if (!state.settings.speak || state.skipSpeech || state.away) return;
     state.speaking = true;

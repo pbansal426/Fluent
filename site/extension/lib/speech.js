@@ -35,16 +35,64 @@ export function pickVoice(voices, lang) {
   return same.reduce((best, v) => (score(v) > score(best) ? v : best));
 }
 
-// Text as it should be spoken: no markup, symbols or list marks read aloud, no stray blank space.
-export const spokenText = (text) =>
-  String(text || '')
+const EN_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const ES_MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+const ordinal = (n) => {
+  const d = Number(n);
+  if (d === 1 || (d % 10 === 1 && d !== 11)) return `${d}st`;
+  if (d === 2 || (d % 10 === 2 && d !== 12)) return `${d}nd`;
+  if (d === 3 || (d % 10 === 3 && d !== 13)) return `${d}rd`;
+  return `${d}th`;
+};
+
+// Text as it should be spoken: no markup, natural dates, expanded abbreviations, and spaced acronyms.
+export const spokenText = (text, lang = 'en') => {
+  let s = String(text || '')
     .replace(/[*_`#>]+/g, '')
     .replace(/\s*[→←↔]\s*/g, ', ')
     .replace(/\s*[–—]\s*/g, ', ')
-    .replace(/\s+/g, ' ')
     .trim();
 
-const ABBR = /\b(dr|mr|mrs|ms|prof|st|ave|blvd|rd|apt|ste|no|n[uú]m|vs|etc|e\.g|i\.e|dra|sr|sra|srta|av|avda|pza)\.\s*$/i;
+  const isEs = /^es|spanish|espa/i.test(String(lang || ''));
+
+  // Expand ISO dates YYYY-MM-DD into natural conversational dates
+  s = s.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (_, y, m, d) => {
+    const mi = Number(m) - 1;
+    const dayNum = Number(d);
+    if (mi >= 0 && mi < 12) {
+      if (isEs) {
+        return `${dayNum} de ${ES_MONTHS[mi]} de ${y}`;
+      }
+      return `${EN_MONTHS[mi]} ${ordinal(dayNum)}, ${y}`;
+    }
+    return _;
+  });
+
+  // Expand common address and building abbreviations
+  if (isEs) {
+    s = s.replace(/\bApt\.\s*/gi, 'Apartamento ')
+         .replace(/\bSte\.\s*/gi, 'Suite ')
+         .replace(/\bAvda?\.\s*/gi, 'Avenida ')
+         .replace(/\bC\/\s*/gi, 'Calle ');
+  } else {
+    s = s.replace(/\bApt\.\s*/gi, 'Apartment ')
+         .replace(/\bSte\.\s*/gi, 'Suite ')
+         .replace(/\bSt\.\s*/gi, 'Street ')
+         .replace(/\bAve\.\s*/gi, 'Avenue ')
+         .replace(/\bBlvd\.\s*/gi, 'Boulevard ')
+         .replace(/\bRd\.\s*/gi, 'Road ');
+  }
+
+  // Expand common identity acronyms for natural vocal cadence
+  s = s.replace(/\bSSN\b/g, 'S-S-N')
+       .replace(/\bEIN\b/g, 'E-I-N')
+       .replace(/\bDOB\b/gi, isEs ? 'fecha de nacimiento' : 'date of birth');
+
+  return s.replace(/\s+/g, ' ').trim();
+};
+
+const ABBR = /\b(dr|mr|mrs|ms|prof|st|ave|blvd|rd|apt|ste|no|n[uú]m|vs|etc|e\.g|i\.e|dra|sr|sra|srta|av|avda|pza|apdo|dpto|cta|col|p[aá]g|tel|ext)\.\s*$/i;
 
 // Splits long speech text into natural spoken sentences without breaking on abbreviations or decimals.
 export function splitSentences(text) {
@@ -110,7 +158,7 @@ export function createSpeech() {
   }
 
   async function speak(text, lang) {
-    text = spokenText(text);
+    text = spokenText(text, lang);
     if (!text) return;
     if (neural) {
       stopSpeaking();

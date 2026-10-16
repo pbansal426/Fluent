@@ -21,6 +21,31 @@ export function renderMilestoneText(milestone, userLang = 'en') {
   return `Part ${milestone.index} of ${milestone.total}: ${milestone.title}${left}`;
 }
 
+export function renderMilestoneHtml(milestone, userLang = 'en') {
+  const text = renderMilestoneText(milestone, userLang);
+  if (!text) return '';
+  const completed = milestone.completedCount ?? 0;
+  const remaining = milestone.remainingCount ?? 0;
+  const total = completed + remaining;
+  const pct = total > 0 ? Math.min(100, Math.max(0, Math.round((completed / total) * 100))) : 0;
+
+  return `<div class="milestone-text">${esc(text)}</div>
+<div class="milestone-track" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
+  <div class="milestone-fill" style="width: ${pct}%"></div>
+</div>`;
+}
+
+export function generateInBubbleChipsHtml(chips = []) {
+  if (!Array.isArray(chips) || !chips.length) return '';
+  const buttons = chips.map((c) => {
+    const action = c.action || 'send';
+    const val = c.value ?? c.label ?? '';
+    const label = c.label ?? c.value ?? '';
+    return `<button type="button" class="chip" data-val="${esc(val)}" data-action="${esc(action)}">${esc(label)}</button>`;
+  }).join('');
+  return `<div class="msg-chips">${buttons}</div>`;
+}
+
 export function generateDocumentHintHtml(hint) {
   if (!hint || !hint.cardTitle) return '';
   return `<div class="doc-hint-inner" data-hint-id="${esc(hint.id)}">
@@ -41,6 +66,13 @@ export function generateBilingualReviewHtml(reviewItems = [], userLang = 'en') {
   const printLabel = isEs ? 'Imprimir / Guardar resumen' : 'Print / Save Bilingual Summary';
   const exportLabel = isEs ? 'Descargar datos (JSON)' : 'Download Data (JSON)';
   const newSessionLabel = isEs ? 'Iniciar nueva sesión' : 'Start New Session';
+
+  const completedCount = reviewItems.filter((r) => !r.skipped).length;
+  const skippedCount = reviewItems.filter((r) => r.skipped).length;
+  const statsHtml = `<div class="review-stats">
+    <span class="review-stat review-stat-done">✓ ${completedCount} ${isEs ? 'completados' : 'completed'}</span>
+    ${skippedCount > 0 ? `<span class="review-stat review-stat-skipped">⊘ ${skippedCount} ${isEs ? 'omitidos' : 'skipped'}</span>` : ''}
+  </div>`;
 
   const rows = reviewItems
     .map(
@@ -67,6 +99,7 @@ export function generateBilingualReviewHtml(reviewItems = [], userLang = 'en') {
 
   return `<div class="review-sheet">
     <div class="review-title">${esc(heading)}</div>
+    ${statsHtml}
     <div class="review-list">${rows}</div>
     <div class="review-actions">
       <button type="button" class="small review-print" data-action="print-review">${esc(printLabel)}</button>

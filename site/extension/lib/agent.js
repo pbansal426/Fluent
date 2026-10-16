@@ -472,7 +472,12 @@ export class Agent {
       this.setMode('listen');
       this.lastAsked = this.question(next);
       this.lastSpoken = this.lastAsked;
-      await this.ui.say(this.lastSpoken);
+      const t = this.tr(next);
+      const opts = (t.options && t.options.length) ? t.options : (next.options || []);
+      const chips = (opts.length && opts.length <= MAX_SPOKEN_OPTIONS)
+        ? opts.map((opt) => ({ label: opt, value: opt }))
+        : undefined;
+      await this.ui.say(this.lastSpoken, chips?.length ? { chips } : undefined);
     }
   }
 
@@ -694,6 +699,7 @@ export class Agent {
                 };
                 this.log('spelling-confirm', { field: field.label, candidate: spell.candidate, options: spell.options });
                 this.pendingPrompt = spell.prompt;
+                this.pendingChips = spell.chips || null;
                 spoken.push(spell.prompt);
               }
               continue;
@@ -756,7 +762,11 @@ export class Agent {
     else if (redacted) await this.ui.say(this.phrases.redacted);
     // A spelling check is the only thing said: the other lines would bury the question.
     const confirmPrompt = this.pendingConfirm ? spoken.find((s) => s === this.pendingPrompt) : '';
-    for (const s of confirmPrompt ? [confirmPrompt] : spoken) await this.ui.say(s);
+    if (confirmPrompt) {
+      await this.ui.say(confirmPrompt, this.pendingChips ? { chips: this.pendingChips } : undefined);
+    } else {
+      for (const s of spoken) await this.ui.say(s);
+    }
 
     if (this.pendingConfirm) {
       const confirmField = this.fields.find((f) => f.id === this.pendingConfirm.fieldId);
