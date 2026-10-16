@@ -129,3 +129,33 @@ test('a hopeless reply is reported with what the model said, for the log', async
   const llm = createClient({ baseUrl: 'http://x/v1', model: 'm', fetchImpl: async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'I cannot do that.' } }] }) }) });
   await assert.rejects(llm.chatJson({ messages: [] }), (e) => e.kind === 'bad_json' && /cannot do that/.test(e.raw));
 });
+
+test('chat captures model reasoning from <think> tags or reasoning_content', async () => {
+  const llm1 = createClient({
+    baseUrl: 'http://x/v1',
+    model: 'm',
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '<think>User wants to enter their name.</think>Hello Maria', reasoning_content: '' } }],
+      }),
+    }),
+  });
+  const res1 = await llm1.chat({ messages: [] });
+  assert.equal(res1.content, 'Hello Maria');
+  assert.equal(res1.reasoning, 'User wants to enter their name.');
+
+  const llm2 = createClient({
+    baseUrl: 'http://x/v1',
+    model: 'm',
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'Answer', reasoning_content: 'Step 1: parse date' } }],
+      }),
+    }),
+  });
+  const res2 = await llm2.chat({ messages: [] });
+  assert.equal(res2.content, 'Answer');
+  assert.equal(res2.reasoning, 'Step 1: parse date');
+});

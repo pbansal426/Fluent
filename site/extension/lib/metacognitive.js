@@ -188,8 +188,8 @@ export class MetacognitiveResolver {
     for (const pair of TEEN_TY_PAIRS) {
       const teenRe = new RegExp(`\\b(${pair.teenWords.join('|')})\\b`, 'i');
       const tyRe = new RegExp(`\\b(${pair.tyWords.join('|')})\\b`, 'i');
-      const hasTeen = teenRe.test(cleanValue) || teenRe.test(said);
-      const hasTy = tyRe.test(cleanValue) || tyRe.test(said);
+      const hasTeen = teenRe.test(cleanValue);
+      const hasTy = tyRe.test(cleanValue);
       const altsHaveTeen = (alternatives || []).some((a) => teenRe.test(String(a)));
       const altsHaveTy = (alternatives || []).some((a) => tyRe.test(String(a)));
 
@@ -234,12 +234,11 @@ export class MetacognitiveResolver {
     }
 
     const words = cleanValue.split(/\s+/);
-    const lowerWords = words.map((w) => w.toLowerCase());
+    const lowerWords = words.map((w) => w.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ''));
     const lowerAltTokens = new Set(
       (alternatives || [])
-        .flatMap((a) => String(a || '').trim().split(/\s+/))
+        .flatMap((a) => String(a || '').toLowerCase().replace(/[^\p{L}\p{N}\s]+/gu, ' ').trim().split(/\s+/))
         .filter(Boolean)
-        .map((t) => t.toLowerCase())
     );
     for (const group of VARIANT_GROUPS) {
       const lowerOpts = group.options.map((o) => o.toLowerCase());

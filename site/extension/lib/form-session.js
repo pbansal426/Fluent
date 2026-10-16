@@ -235,17 +235,23 @@ export class FormSession {
   static fromSchema(schema = {}) {
     const fields = [];
     const milestones = [];
-    for (const section of schema.sections || []) {
-      const fieldIds = [];
-      for (const field of section.fields || []) {
-        fields.push({ ...field, section: section.title || section.id });
-        fieldIds.push(field.id);
+    if (Array.isArray(schema.sections) && schema.sections.length > 0) {
+      for (const section of schema.sections) {
+        const fieldIds = [];
+        for (const field of section.fields || []) {
+          fields.push({ ...field, section: section.title || section.id });
+          fieldIds.push(field.id);
+        }
+        milestones.push({
+          id: section.id,
+          title: section.title || section.id,
+          fieldIds,
+        });
       }
-      milestones.push({
-        id: section.id,
-        title: section.title || section.id,
-        fieldIds,
-      });
+    } else if (Array.isArray(schema.fields) && schema.fields.length > 0) {
+      for (const field of schema.fields) {
+        fields.push({ ...field });
+      }
     }
     return new FormSession({ fields, milestones, metadata: { title: schema.title || '' } });
   }

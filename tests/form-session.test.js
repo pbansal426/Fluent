@@ -219,3 +219,17 @@ test('buildReviewItems includes skipped fields with skipped: true and localized 
   assert.equal(review[1].skipped, true);
 });
 
+test('FormSession.fromSchema supports flat fields list without sections', () => {
+  const schema = {
+    title: 'Flat Form',
+    fields: [
+      { id: 'f1', label: 'First Name', kind: 'text' },
+      { id: 'f2', label: 'Last Name', kind: 'text' },
+    ],
+  };
+  const session = FormSession.fromSchema(schema);
+  assert.equal(session.getFields().length, 2);
+  assert.equal(session.getField('f1').label, 'First Name');
+  assert.equal(session.getMilestones().length, 1);
+});
+
