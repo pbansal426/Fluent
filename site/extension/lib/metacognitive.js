@@ -68,6 +68,33 @@ const VARIANT_GROUPS = [
       return null;
     },
   },
+  {
+    options: ['Sofia', 'Sophia'],
+    prompt: (lang) => (lang === 'es' ? '¿Se escribe Sofía con F o Sophia con P-H?' : 'Got it — is that Sofia with an F or Sophia with P-H?'),
+    resolveRule: (said) => {
+      if (/\b(with (an )?f|con f|\bf\b)\b/i.test(said)) return 'Sofia';
+      if (/\b(with p[\s-]*h|con p[\s-]*h|\bph\b)\b/i.test(said)) return 'Sophia';
+      return null;
+    },
+  },
+  {
+    options: ['Catherine', 'Katherine'],
+    prompt: (lang) => (lang === 'es' ? '¿Se escribe Catherine con C o Katherine con K?' : 'Got it — is that Catherine with a C or Katherine with a K?'),
+    resolveRule: (said) => {
+      if (/\b(with a c|con c|\bc\b)\b/i.test(said)) return 'Catherine';
+      if (/\b(with a k|con k|\bk\b)\b/i.test(said)) return 'Katherine';
+      return null;
+    },
+  },
+  {
+    options: ['Teresa', 'Theresa'],
+    prompt: (lang) => (lang === 'es' ? '¿Teresa se escribe con T o con T-H?' : 'Got it — is that Teresa with a T or Theresa with T-H?'),
+    resolveRule: (said) => {
+      if (/\b(with a t|con t|without (an )?h|sin h|\bt\b)\b/i.test(said)) return 'Teresa';
+      if (/\b(with t[\s-]*h|con t[\s-]*h|\bth\b)\b/i.test(said)) return 'Theresa';
+      return null;
+    },
+  },
 ];
 
 const TEEN_TY_PAIRS = [

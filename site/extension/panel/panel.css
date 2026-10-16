@@ -127,8 +127,8 @@ label.check[hidden], button.icon[hidden] { display: none !important; }
 .review-row.is-private .review-val { color: var(--muted); font-style: italic; font-weight: 400; }
 .review-row.is-skipped { border-left: 3px solid var(--muted); opacity: 0.92; }
 .review-row.is-skipped .review-val { color: var(--muted); font-style: italic; font-weight: 500; }
-.review-actions { display: flex; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
-.review-actions button { flex: 1; font-size: 12px; padding: 7px 10px; }
+.review-actions { display: flex; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.review-actions button { flex: 1 1 calc(50% - 8px); min-width: 120px; font-size: 12px; padding: 7px 10px; }
 @media print {
   body * { visibility: hidden; }
   #review-card, #review-card * { visibility: visible; }

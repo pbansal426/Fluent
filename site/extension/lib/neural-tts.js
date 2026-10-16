@@ -1,9 +1,7 @@
-// A natural voice from OpenAI's text-to-speech endpoint, used when the user has pasted an OpenAI key.
-// Sentences are fetched one ahead of the one being played, so there is no gap between them.
-// It throws if the service is unavailable; speech.js then falls back to the browser's own voice.
+import { splitSentences } from './speech.js';
 
 export function sentencesOf(text) {
-  return text.match(/[^.!?。？！।؟]+[.!?。？！।؟]*\s*/g)?.map((s) => s.trim()).filter(Boolean) || [text];
+  return splitSentences(text);
 }
 
 export function createNeuralTts({ apiKey, baseUrl = 'https://api.openai.com/v1', model = 'gpt-4o-mini-tts', voice = 'nova', fetchImpl = (...a) => fetch(...a), audioFactory = (url) => new Audio(url) }) {
