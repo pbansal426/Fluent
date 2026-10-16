@@ -120,3 +120,28 @@ test('MetacognitiveResolver detects -teen vs -ty acoustic number ambiguities and
   assert.deepEqual(resolver.resolveConfirmation(pendingStreet, 'the second one'), { resolved: true, value: '40 Elm St' });
 });
 
+test('MetacognitiveResolver handles Sofia/Sophia, Catherine/Katherine, and Teresa/Theresa', () => {
+  const resolver = new MetacognitiveResolver();
+  const field = { id: 'first_name', label: 'First name', kind: 'text' };
+
+  // Sofia vs Sophia
+  const resSofia = resolver.assessSpelling(field, 'Sofia', { said: 'Sofia', alternatives: ['Sophia'], lang: 'es' });
+  assert.equal(resSofia.needsConfirmation, true);
+  assert.deepEqual(resSofia.options, ['Sofia', 'Sophia']);
+  assert.match(resSofia.prompt, /con F o (?:Sophia )?con P-H/i);
+  assert.deepEqual(resolver.resolveConfirmation({ fieldId: 'first_name', candidate: 'Sofia', options: ['Sofia', 'Sophia'] }, 'con F'), { resolved: true, value: 'Sofia' });
+  assert.deepEqual(resolver.resolveConfirmation({ fieldId: 'first_name', candidate: 'Sofia', options: ['Sofia', 'Sophia'] }, 'con ph'), { resolved: true, value: 'Sophia' });
+
+  // Catherine vs Katherine
+  const resCath = resolver.assessSpelling(field, 'Catherine', { said: 'Catherine', alternatives: ['Katherine'], lang: 'en' });
+  assert.equal(resCath.needsConfirmation, true);
+  assert.deepEqual(resCath.options, ['Catherine', 'Katherine']);
+  assert.deepEqual(resolver.resolveConfirmation({ fieldId: 'first_name', candidate: 'Catherine', options: ['Catherine', 'Katherine'] }, 'with a K'), { resolved: true, value: 'Katherine' });
+
+  // Teresa vs Theresa
+  const resTeresa = resolver.assessSpelling(field, 'Teresa', { said: 'Teresa', alternatives: ['Theresa'], lang: 'es' });
+  assert.equal(resTeresa.needsConfirmation, true);
+  assert.deepEqual(resTeresa.options, ['Teresa', 'Theresa']);
+  assert.deepEqual(resolver.resolveConfirmation({ fieldId: 'first_name', candidate: 'Teresa', options: ['Teresa', 'Theresa'] }, 'sin h'), { resolved: true, value: 'Teresa' });
+});
+
