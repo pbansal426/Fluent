@@ -55,7 +55,7 @@ const NAMEISH_NOISE = /^(yes|no|yeah|yep|nope|ok|okay|sure|s[ií]|vale|hello|hol
 // chatter must not silently skip a question just because a small model reached for skip_field.
 export function looksLikeSkip(said) {
   const t = String(said || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\p{L}\p{N}' /]+/gu, ' ').replace(/\s+/g, ' ').trim();
-  return /\b(skip|pass|next( one| question)?|move on|no thanks|i don't (have|know|want|remember)|i do not (have|know|want|remember)|i have no|i dont (have|know|want)|none|n\/?a|not applicable|doesn't apply|does not apply|prefer not|rather not|later|saltar|salta|omitir|omite|siguiente|paso|no tengo|no aplica|no se|no quiero|no recuerdo|prefiero no|despues)\b/.test(t);
+  return /\b(skip|pass|next( one| question)?|move on|no thanks|i don't (have|know|want|remember)|i do not (have|know|want|remember)|i have no|i dont (have|know|want)|none|nothing|we don't have|we dont have|ninguno|ninguna|ningun|nada|no tengo eso|n\/?a|not applicable|doesn't apply|does not apply|prefer not|rather not|later|saltar|salta|omitir|omite|siguiente|paso|no tengo|no aplica|no se|no quiero|no recuerdo|prefiero no|despues)\b/.test(t);
 }
 
 // A plain yes / no in a few words ("yes", "I am", "never", "sí"): 'Yes', 'No', or null when it is anything else.

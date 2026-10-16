@@ -76,6 +76,48 @@ const DOCUMENT_HINTS = [
       whereToLook: 'Busque arriba a la izquierda en su formulario W-2, en la casilla b ("EIN").',
     },
   },
+  {
+    id: 'passport_number',
+    match: /\b(passport|pasaporte)\b/i,
+    sampleCode: 'P: 123456789',
+    highlightZone: 'top-right',
+    en: {
+      cardTitle: 'Passport',
+      whereToLook: 'Open your passport to the photo page. The passport number is printed at the top right.',
+    },
+    es: {
+      cardTitle: 'Pasaporte',
+      whereToLook: 'Abra su pasaporte en la página de la foto. El número de pasaporte está arriba a la derecha.',
+    },
+  },
+  {
+    id: 'form_i94',
+    match: /\b(i-?94|arrival\s+record|registro\s+de\s+(llegada|entrada))\b/i,
+    sampleCode: '123456789A2',
+    highlightZone: 'center-left',
+    en: {
+      cardTitle: 'Form I-94 Arrival Record',
+      whereToLook: 'Look at your I-94 record (print it at i94.cbp.dhs.gov) for the 11-character "Admission (I-94) Record Number".',
+    },
+    es: {
+      cardTitle: 'Registro de Llegada I-94',
+      whereToLook: 'Mire su registro I-94 (imprímalo en i94.cbp.dhs.gov) y busque el número de 11 caracteres "Admission (I-94) Record Number".',
+    },
+  },
+  {
+    id: 'drivers_license',
+    match: /\b(driver'?s?\s*licen[sc]e|driving\s+licen[sc]e|dl\s*(number|no|#)|licencia\s+de\s+(conducir|manejar)|licencia\s+de\s+conductor)\b/i,
+    sampleCode: 'DL: D1234567',
+    highlightZone: 'top-right',
+    en: {
+      cardTitle: "Driver's License",
+      whereToLook: 'Look on the front of your license near the top, next to "DL" or "License No."',
+    },
+    es: {
+      cardTitle: 'Licencia de Conducir',
+      whereToLook: 'Busque en el frente de su licencia, arriba, junto a "DL" o "License No."',
+    },
+  },
 ];
 
 export function getDocumentHint(field, userLang = 'English') {
