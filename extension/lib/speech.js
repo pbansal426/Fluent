@@ -1,4 +1,5 @@
 // Chrome's built-in speech: recognition (speech-to-text) and synthesis (text-to-speech).
+import { detectHesitation } from './live.js';
 
 // `start` is the start-button label in the language itself, shown before any model call.
 export const LANGUAGES = [
@@ -117,7 +118,7 @@ export function createSpeech() {
   }
 
   // Resolves with what the user said ('' if nothing); rejects with the recognition error code.
-  function listen(lang, { onInterim } = {}) {
+  function listen(lang, { onInterim, onHesitation } = {}) {
     return new Promise((resolve, reject) => {
       if (!Recognition) return reject(new Error('unsupported'));
       stopListening();
@@ -149,7 +150,9 @@ export function createSpeech() {
           }
           else interim += e.results[i][0].transcript;
         }
-        onInterim?.(finalText + interim);
+        const combined = finalText + interim;
+        onInterim?.(combined);
+        if (combined && onHesitation) onHesitation(detectHesitation(combined));
       };
       rec.onerror = (e) => {
         finish(e.error === 'no-speech' || e.error === 'aborted' ? '' : e.error);
@@ -167,5 +170,15 @@ export function createSpeech() {
     active?.abort();
   }
 
-  return { supported: !!Recognition, speak, stopSpeaking, listen, stopListening, setNeural: (n) => (neural = n || null), get neural() { return !!neural; }, get lastAlts() { return lastAlts; } };
+  return {
+    supported: !!Recognition,
+    speak,
+    stopSpeaking,
+    duckSpeaking: stopSpeaking,
+    listen,
+    stopListening,
+    setNeural: (n) => (neural = n || null),
+    get neural() { return !!neural; },
+    get lastAlts() { return lastAlts; },
+  };
 }
