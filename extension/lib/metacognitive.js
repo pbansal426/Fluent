@@ -8,6 +8,13 @@ const VARIANT_GROUPS = [
   {
     options: ['Bryan', 'Brian'],
     prompt: (lang) => (lang === 'es' ? '¿Se escribe Bryan con Y o Brian con I?' : 'Got it — is that Bryan with a Y or Brian with an I?'),
+    chips: (lang) => (lang === 'es' ? [
+      { label: 'Bryan (con Y)', value: 'con Y' },
+      { label: 'Brian (con I)', value: 'con I' },
+    ] : [
+      { label: 'Bryan (with Y)', value: 'with a Y' },
+      { label: 'Brian (with I)', value: 'with an I' },
+    ]),
     resolveRule: (said) => {
       if (/\b(with a y|con y|con i griega|con ye|\by\b)\b/i.test(said)) return 'Bryan';
       if (/\b(with an i|con i|con i latina|\bi\b)\b/i.test(said)) return 'Brian';
@@ -17,6 +24,13 @@ const VARIANT_GROUPS = [
   {
     options: ['Sarah', 'Sara'],
     prompt: (lang) => (lang === 'es' ? '¿Sara se escribe con H o sin H al final?' : 'Got it — is that Sarah with an H or Sara without an H?'),
+    chips: (lang) => (lang === 'es' ? [
+      { label: 'Sara (sin H)', value: 'sin H' },
+      { label: 'Sarah (con H)', value: 'con H' },
+    ] : [
+      { label: 'Sara (no H)', value: 'without an H' },
+      { label: 'Sarah (with H)', value: 'with an H' },
+    ]),
     resolveRule: (said) => {
       if (/\b(without (an )?h|no h|sin h)\b/i.test(said)) return 'Sara';
       if (/\b(with (an )?h|con h|\bh\b)\b/i.test(said)) return 'Sarah';
@@ -26,6 +40,13 @@ const VARIANT_GROUPS = [
   {
     options: ['John', 'Jon'],
     prompt: (lang) => (lang === 'es' ? '¿Se escribe J-O-H-N con H o J-O-N sin H?' : 'Got it — is that J-O-H-N with an H or J-O-N?'),
+    chips: (lang) => (lang === 'es' ? [
+      { label: 'John (con H)', value: 'con H' },
+      { label: 'Jon (sin H)', value: 'sin H' },
+    ] : [
+      { label: 'John (with H)', value: 'with an H' },
+      { label: 'Jon (no H)', value: 'without an H' },
+    ]),
     resolveRule: (said) => {
       if (/\b(without (an )?h|no h|sin h|j[\s-]*o[\s-]*n)\b/i.test(said)) return 'Jon';
       if (/\b(with (an )?h|con h|j[\s-]*o[\s-]*h[\s-]*n|\bh\b)\b/i.test(said)) return 'John';
@@ -35,6 +56,13 @@ const VARIANT_GROUPS = [
   {
     options: ['Marc', 'Mark'],
     prompt: (lang) => (lang === 'es' ? '¿Se escribe Marc con C o Mark con K?' : 'Got it — is that Marc with a C or Mark with a K?'),
+    chips: (lang) => (lang === 'es' ? [
+      { label: 'Marc (con C)', value: 'con C' },
+      { label: 'Mark (con K)', value: 'con K' },
+    ] : [
+      { label: 'Marc (with C)', value: 'with a C' },
+      { label: 'Mark (with K)', value: 'with a K' },
+    ]),
     resolveRule: (said) => {
       if (/\b(with a c|con c|\bc\b)\b/i.test(said)) return 'Marc';
       if (/\b(with a k|con k|\bk\b)\b/i.test(said)) return 'Mark';
@@ -44,6 +72,13 @@ const VARIANT_GROUPS = [
   {
     options: ['Steven', 'Stephen'],
     prompt: (lang) => (lang === 'es' ? '¿Se escribe Steven con V o Stephen con P-H?' : 'Got it — is that Steven with a V or Stephen with P-H?'),
+    chips: (lang) => (lang === 'es' ? [
+      { label: 'Steven (con V)', value: 'con V' },
+      { label: 'Stephen (con P-H)', value: 'con PH' },
+    ] : [
+      { label: 'Steven (with V)', value: 'with a V' },
+      { label: 'Stephen (with P-H)', value: 'with P-H' },
+    ]),
     resolveRule: (said) => {
       if (/\b(with a v|con v|\bv\b)\b/i.test(said)) return 'Steven';
       if (/\b(with p[\s-]*h|con p[\s-]*h|\bph\b)\b/i.test(said)) return 'Stephen';
@@ -53,6 +88,13 @@ const VARIANT_GROUPS = [
   {
     options: ['Eric', 'Erik'],
     prompt: (lang) => (lang === 'es' ? '¿Se escribe Eric con C o Erik con K?' : 'Got it — is that Eric with a C or Erik with a K?'),
+    chips: (lang) => (lang === 'es' ? [
+      { label: 'Eric (con C)', value: 'con C' },
+      { label: 'Erik (con K)', value: 'con K' },
+    ] : [
+      { label: 'Eric (with C)', value: 'with a C' },
+      { label: 'Erik (with K)', value: 'with a K' },
+    ]),
     resolveRule: (said) => {
       if (/\b(with a c|con c|\bc\b)\b/i.test(said)) return 'Eric';
       if (/\b(with a k|con k|\bk\b)\b/i.test(said)) return 'Erik';
@@ -62,6 +104,13 @@ const VARIANT_GROUPS = [
   {
     options: ['Shawn', 'Sean'],
     prompt: (lang) => (lang === 'es' ? '¿Se escribe Shawn con S-H-A-W-N o Sean con S-E-A-N?' : 'Got it — is that Shawn (S-H-A-W-N) or Sean (S-E-A-N)?'),
+    chips: (lang) => (lang === 'es' ? [
+      { label: 'Shawn (S-H-A-W-N)', value: 'Shawn' },
+      { label: 'Sean (S-E-A-N)', value: 'Sean' },
+    ] : [
+      { label: 'Shawn (S-H-A-W-N)', value: 'Shawn' },
+      { label: 'Sean (S-E-A-N)', value: 'Sean' },
+    ]),
     resolveRule: (said) => {
       if (/\b(shawn|with a w|con w|s[\s-]*h[\s-]*a[\s-]*w[\s-]*n)\b/i.test(said)) return 'Shawn';
       if (/\b(sean|with ea|con e|s[\s-]*e[\s-]*a[\s-]*n)\b/i.test(said)) return 'Sean';
@@ -71,6 +120,13 @@ const VARIANT_GROUPS = [
   {
     options: ['Sofia', 'Sophia'],
     prompt: (lang) => (lang === 'es' ? '¿Se escribe Sofía con F o Sophia con P-H?' : 'Got it — is that Sofia with an F or Sophia with P-H?'),
+    chips: (lang) => (lang === 'es' ? [
+      { label: 'Sofía (con F)', value: 'con F' },
+      { label: 'Sophia (con P-H)', value: 'con PH' },
+    ] : [
+      { label: 'Sofia (with F)', value: 'with an F' },
+      { label: 'Sophia (with P-H)', value: 'with P-H' },
+    ]),
     resolveRule: (said) => {
       if (/\b(with (an )?f|con f|\bf\b)\b/i.test(said)) return 'Sofia';
       if (/\b(with p[\s-]*h|con p[\s-]*h|\bph\b)\b/i.test(said)) return 'Sophia';
@@ -80,6 +136,13 @@ const VARIANT_GROUPS = [
   {
     options: ['Catherine', 'Katherine'],
     prompt: (lang) => (lang === 'es' ? '¿Se escribe Catherine con C o Katherine con K?' : 'Got it — is that Catherine with a C or Katherine with a K?'),
+    chips: (lang) => (lang === 'es' ? [
+      { label: 'Catherine (con C)', value: 'con C' },
+      { label: 'Katherine (con K)', value: 'con K' },
+    ] : [
+      { label: 'Catherine (with C)', value: 'with a C' },
+      { label: 'Katherine (with K)', value: 'with a K' },
+    ]),
     resolveRule: (said) => {
       if (/\b(with a c|con c|\bc\b)\b/i.test(said)) return 'Catherine';
       if (/\b(with a k|con k|\bk\b)\b/i.test(said)) return 'Katherine';
@@ -89,6 +152,13 @@ const VARIANT_GROUPS = [
   {
     options: ['Teresa', 'Theresa'],
     prompt: (lang) => (lang === 'es' ? '¿Teresa se escribe con T o con T-H?' : 'Got it — is that Teresa with a T or Theresa with T-H?'),
+    chips: (lang) => (lang === 'es' ? [
+      { label: 'Teresa (con T)', value: 'con T' },
+      { label: 'Theresa (con T-H)', value: 'con TH' },
+    ] : [
+      { label: 'Teresa (with T)', value: 'with a T' },
+      { label: 'Theresa (with T-H)', value: 'with T-H' },
+    ]),
     resolveRule: (said) => {
       if (/\b(with a t|con t|without (an )?h|sin h|\bt\b)\b/i.test(said)) return 'Teresa';
       if (/\b(with t[\s-]*h|con t[\s-]*h|\bth\b)\b/i.test(said)) return 'Theresa';
@@ -239,12 +309,21 @@ export class MetacognitiveResolver {
           ? `Para confirmar, ¿dijo ${hasTeen ? `${pair.teen} o ${pair.ty}` : `${pair.ty} o ${pair.teen}`}?`
           : `Just to be sure, was that ${hasTeen ? `${pair.teen} or ${pair.ty}` : `${pair.ty} or ${pair.teen}`}?`;
 
+        const chips = hasTeen ? [
+          { label: String(pair.teen), value: String(pair.teen) },
+          { label: String(pair.ty), value: String(pair.ty) },
+        ] : [
+          { label: String(pair.ty), value: String(pair.ty) },
+          { label: String(pair.teen), value: String(pair.teen) },
+        ];
+
         return {
           needsConfirmation: true,
           variantType: 'number_split',
           options: [opt1, opt2],
           baseOptions: hasTeen ? [String(pair.teen), String(pair.ty)] : [String(pair.ty), String(pair.teen)],
           prompt,
+          chips,
           candidate: cleanValue,
           value: cleanValue,
         };
@@ -276,12 +355,17 @@ export class MetacognitiveResolver {
         if (alreadyDisambiguated) {
           return { needsConfirmation: false, value: replaceAt(alreadyDisambiguated) };
         }
+        const chips = group.chips
+          ? group.chips(langCode)
+          : group.options.map((o) => ({ label: o, value: o }));
+
         return {
           needsConfirmation: true,
           variantType: 'name_split',
           options: group.options.map((o) => replaceAt(o)),
           baseOptions: [...group.options],
           prompt: group.prompt(langCode),
+          chips,
           candidate: cleanValue,
           value: cleanValue,
         };

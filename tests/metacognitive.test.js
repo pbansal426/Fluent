@@ -145,3 +145,22 @@ test('MetacognitiveResolver handles Sofia/Sophia, Catherine/Katherine, and Teres
   assert.deepEqual(resolver.resolveConfirmation({ fieldId: 'first_name', candidate: 'Teresa', options: ['Teresa', 'Theresa'] }, 'sin h'), { resolved: true, value: 'Teresa' });
 });
 
+test('MetacognitiveResolver generates interactive quick-choice chips for homophone prompts', () => {
+  const resolver = new MetacognitiveResolver();
+  const field = { id: 'first_name', label: 'First name', kind: 'text' };
+
+  const resSofia = resolver.assessSpelling(field, 'Sofia', { said: 'Sofia', alternatives: ['Sophia'], lang: 'es' });
+  assert.equal(resSofia.needsConfirmation, true);
+  assert.ok(Array.isArray(resSofia.chips));
+  assert.equal(resSofia.chips.length, 2);
+  assert.deepEqual(resSofia.chips[0], { label: 'Sofía (con F)', value: 'con F' });
+  assert.deepEqual(resSofia.chips[1], { label: 'Sophia (con P-H)', value: 'con PH' });
+
+  const resBryan = resolver.assessSpelling(field, 'Bryan', { said: 'Bryan', alternatives: ['Brian'], lang: 'en' });
+  assert.equal(resBryan.needsConfirmation, true);
+  assert.ok(Array.isArray(resBryan.chips));
+  assert.deepEqual(resBryan.chips[0], { label: 'Bryan (with Y)', value: 'with a Y' });
+  assert.deepEqual(resBryan.chips[1], { label: 'Brian (with I)', value: 'with an I' });
+});
+
+
