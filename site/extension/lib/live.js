@@ -2,13 +2,21 @@
 // the assistant at any moment without tapping anything. Only the detection of "the user started talking"
 // lives here; speech-to-text itself is still Chrome's recogniser (speech.js).
 
+const HESITATION_TAIL = /(?:,\s*|\s+|^)(um+|uh+|eh+|er+|hmm+|let me see|let's see|wait|hold on|este|pues|eh|a ver|espere|d[eé]jeme ver|and|or|y|o)\s*[.…]*$/i;
+
+export function detectHesitation(transcript) {
+  const clean = String(transcript || '').trim();
+  if (!clean) return false;
+  return HESITATION_TAIL.test(clean) || /[.…]{2,}$/.test(clean);
+}
+
 // Pure detector: feed it a loudness reading and a time; it says once when real talking started.
 //  - Loudness must stay above the threshold for `holdMs` (a click or cough is not talking).
 //  - The threshold follows the room: a few times the quietest level recently heard.
 //  - While the assistant is speaking, the first moments are used to learn how loud the assistant itself is
 //    at the microphone (speaker echo), and the user has to be clearly louder than that.
 //  - desensitize() makes it less eager after a false trigger, so no settings are needed.
-export function createVoiceDetector({ holdMs = 180, minThreshold = 0.03, learnMs = 600, echoMargin = 1.7 } = {}) {
+export function createVoiceDetector({ holdMs = 180, minThreshold = 0.03, learnMs = 600, echoMargin = 1.7, silenceMs = 600 } = {}) {
   const FACTOR = 3.5;
   let floor = 0.01;
   let since = null;
@@ -16,6 +24,7 @@ export function createVoiceDetector({ holdMs = 180, minThreshold = 0.03, learnMs
   let armedAt = null;
   let echoPeak = 0;
   let boost = 1;
+  let currentSilenceMs = silenceMs;
   return {
     arm(now) {
       armedAt = now;
@@ -31,6 +40,13 @@ export function createVoiceDetector({ holdMs = 180, minThreshold = 0.03, learnMs
     },
     desensitize() {
       boost = Math.min(boost * 1.4, 4);
+    },
+    get silenceMs() {
+      return currentSilenceMs;
+    },
+    setAdaptivePause({ hesitant = false } = {}) {
+      currentSilenceMs = hesitant ? 1800 : 500;
+      return currentSilenceMs;
     },
     // returns true once per stretch of talking, when it has lasted long enough
     feed(level, now) {
@@ -92,6 +108,10 @@ export function createLive({ onVoice } = {}) {
     get active() {
       return !!stream?.active;
     },
+    get silenceMs() {
+      return detector.silenceMs;
+    },
+    setAdaptivePause: (opts) => detector.setAdaptivePause(opts),
     arm(on) {
       armed = !!on;
       if (armed) detector.arm(performance.now());
