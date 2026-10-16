@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   renderMilestoneText,
+  renderMilestoneHtml,
+  generateInBubbleChipsHtml,
   generateDocumentHintHtml,
   generateBilingualReviewHtml,
 } from '../extension/panel/review-card.js';
@@ -92,3 +94,26 @@ test('generateBilingualReviewHtml renders skipped items with Answer button and l
   assert.match(htmlEs, /Iniciar nueva sesión/);
   assert.match(htmlEs, /Descargar datos \(JSON\)/);
 });
+
+test('renderMilestoneHtml renders animated progress track and percentage', () => {
+  const m = { index: 1, total: 5, title: 'Personal', completedCount: 3, remainingCount: 7 };
+  const html = renderMilestoneHtml(m, 'es');
+  assert.match(html, /Parte 1 de 5: Personal · faltan 7/);
+  assert.match(html, /milestone-track/);
+  assert.match(html, /milestone-fill/);
+  assert.match(html, /style="width:\s*30%"/);
+});
+
+test('generateInBubbleChipsHtml renders interactive button chips with escaped data values', () => {
+  const chips = [
+    { label: 'Sofía (con F)', value: 'con F' },
+    { label: 'Sophia (con P-H)', value: 'con PH' },
+  ];
+  const html = generateInBubbleChipsHtml(chips);
+  assert.match(html, /class="msg-chips"/);
+  assert.match(html, /data-val="con F"[^>]*>Sofía \(con F\)</);
+  assert.match(html, /data-val="con PH"[^>]*>Sophia \(con P-H\)</);
+  assert.equal(generateInBubbleChipsHtml([]), '');
+  assert.equal(generateInBubbleChipsHtml(null), '');
+});
+
