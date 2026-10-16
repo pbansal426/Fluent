@@ -7,7 +7,7 @@ const base = { inputType: 'text', name: '', htmlId: '', autocomplete: '', placeh
 
 function createTestRig(fields, turns = []) {
   const dom = new Map();
-  const log = { said: [], prompts: [], filled: [], llmMessages: [], errors: [] };
+  const log = { said: [], saidCalls: [], prompts: [], filled: [], llmMessages: [], errors: [] };
   const page = {
     scan: async () => ({ fields: structuredClone(fields), texts: [], pageLang: 'en' }),
     apply: async () => ({ ok: true }),
@@ -24,7 +24,10 @@ function createTestRig(fields, turns = []) {
     read: async (id) => ({ ok: true, value: dom.get(id) || '' }),
   };
   const ui = {
-    say: async (t) => void log.said.push(t),
+    say: async (t, opts) => {
+      log.said.push(t);
+      log.saidCalls.push({ text: t, options: opts });
+    },
     prompt: (s) => log.prompts.push(s),
     filled: (items) => log.filled.push(...items),
     status: () => {},
@@ -179,3 +182,42 @@ test('Agent preserves first ambiguous field when multiple ambiguous fields exist
   assert.equal(log.said.length, 1);
   assert.match(log.said[0], /Bryan with a Y/i);
 });
+
+test('Agent passes choice chips when asking a select field with options', async () => {
+  const fields = [
+    { ...base, id: 'sex', kind: 'select', label: 'Sex assigned at birth', options: ['Female', 'Male', 'Intersex'] },
+  ];
+  const { agent, log } = createTestRig(fields);
+  await agent.start();
+
+  const lastSay = log.saidCalls[log.saidCalls.length - 1];
+  assert.ok(lastSay);
+  assert.ok(Array.isArray(lastSay.options?.chips));
+  assert.deepEqual(lastSay.options.chips, [
+    { label: 'Female', value: 'Female' },
+    { label: 'Male', value: 'Male' },
+    { label: 'Intersex', value: 'Intersex' },
+  ]);
+});
+
+test('Agent passes spelling chips when asking homophone confirmation', async () => {
+  const fields = [
+    { ...base, id: 'f1', kind: 'text', label: 'First name' },
+  ];
+  const turn = {
+    content: '',
+    toolCalls: [{ name: 'fill_fields', args: { values: [{ field_id: 'f1', value: 'Bryan' }] } }],
+  };
+  const { agent, log } = createTestRig(fields, [turn]);
+  await agent.start();
+  log.saidCalls.length = 0;
+
+  await agent.handleUser('Bryan', { alts: ['Brian'] });
+  assert.equal(log.saidCalls.length, 1);
+  const confirmSay = log.saidCalls[0];
+  assert.ok(Array.isArray(confirmSay.options?.chips));
+  assert.equal(confirmSay.options.chips.length, 2);
+  assert.equal(confirmSay.options.chips[0].value, 'with a Y');
+  assert.equal(confirmSay.options.chips[1].value, 'with an I');
+});
+
