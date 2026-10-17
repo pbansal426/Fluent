@@ -36,6 +36,7 @@ const state = {
   tabId: null,
   mode: 'idle',
   field: null,
+  editingField: null,
   milestone: null,
   documentHint: null,
   review: null,
@@ -216,14 +217,33 @@ function filledBubble(items) {
   editBtn.textContent = isEs ? '✎ Editar' : '✎ Edit';
   editBtn.addEventListener('click', () => {
     confirmChips.remove();
-    act(() => {
-      const f = state.agent?.findField?.(lastItem?.id);
-      if (f) state.agent.advance(f);
-      $('text')?.focus();
-    });
+    startTypingEdit(lastItem);
   });
   confirmChips.append(goodBtn, editBtn);
   b.appendChild(confirmChips);
+}
+
+function startTypingEdit(item) {
+  if (!state.agent || !item) return;
+  const f = state.agent.fields.find((x) => x.id === item.id) || state.agent.findField?.(item.id);
+  if (!f) return;
+
+  speech.stopSpeaking();
+  cancelListening();
+  state.voiceOn = false;
+  state.editingField = { id: f.id, label: state.agent.tr(f).label, original: f.label, value: item.value || '' };
+
+  const isEs = /^es|spanish|espa/i.test(String(lang().code || ''));
+  const fieldName = state.agent.tr(f).label.replace(/[\s*:]+$/, '');
+  ui.say(isEs ? `✎ Escribe tu corrección para ${fieldName} abajo:` : `✎ Type your correction for ${fieldName} below:`);
+
+  const input = $('text');
+  if (input) {
+    input.value = item.value || '';
+    input.focus();
+    input.select();
+  }
+  render();
 }
 
 function render() {
@@ -530,6 +550,17 @@ async function reset() {
 function sendText(text, spoken = false) {
   text = text.trim();
   if (!text || !state.agent) return false;
+  if (state.editingField) {
+    const edit = state.editingField;
+    state.editingField = null;
+    speech.stopSpeaking();
+    cancelListening();
+    bubble('user', text);
+    runTurn(async () => {
+      await state.agent.submitTypedEdit(edit.id, text);
+    });
+    return true;
+  }
   if (state.mode === 'type' && state.field?.sensitive) {
     // Spoken text never reaches a private field; only what is typed here does.
     if (spoken) return false;
@@ -921,7 +952,10 @@ $('review-card')?.addEventListener('click', (e) => {
   const btn = e.target.closest?.('[data-edit-field]');
   if (!btn || !state.agent) return;
   const fieldId = btn.getAttribute('data-edit-field');
-  if (fieldId) act(() => state.agent.editField(fieldId));
+  if (fieldId) {
+    const item = state.review?.find((x) => x.id === fieldId) || { id: fieldId, value: state.agent.values.get(fieldId) || '' };
+    startTypingEdit(item);
+  }
 });
 $('show-tr').addEventListener('change', (e) => {
   state.send?.({ type: 'fluent:visible', show: e.target.checked }).catch(() => {});

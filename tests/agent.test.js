@@ -473,3 +473,17 @@ test('a long PDF: when a page is finished the assistant moves on to the next pag
   assert.equal(agent.mode, 'done');
   assert.equal(log.said.at(-1), agent.phrases.done);
 });
+
+test('submitTypedEdit fills field directly without model call, emits confirmation and advances', async () => {
+  const { agent, dom, log } = setup([fill(['f1', 'Heath'])]);
+  await agent.start();
+  await agent.handleUser('Heath');
+  assert.equal(dom.get('f1'), 'Heath');
+
+  // Now user triggers typed edit on f1 with correction "Keith"
+  await agent.submitTypedEdit('f1', 'Keith');
+  assert.equal(dom.get('f1'), 'Keith');
+  assert.equal(log.filled.at(-1).value, 'Keith');
+  assert.equal(agent.values.get('f1'), 'Keith');
+});
+

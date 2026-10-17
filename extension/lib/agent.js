@@ -372,6 +372,36 @@ export class Agent {
     await this.advance(field);
   }
 
+  async submitTypedEdit(fieldId, text) {
+    const field = this.fields.find((f) => f.id === fieldId) || this.findField(fieldId);
+    if (!field || this.busy) return;
+    this.busy = true;
+    try {
+      const r = await this.fillField(field, text);
+      if (!r?.ok) return;
+      this.filled.add(field.id);
+      this.skipped.delete(field.id);
+      this.values.set(field.id, r.value);
+      this.log('fill-edit', { field: field.label, value: r.value });
+      this.lastFill = { field_id: field.id, label: field.label, value: r.value };
+      const done = [{
+        id: field.id,
+        label: this.tr(field).label,
+        original: field.label,
+        value: r.value,
+        shown: this.shownValue(field, r.value),
+      }];
+      this.ui.filled(done);
+      if (this.mode === 'done') {
+        this.setMode('done');
+      } else {
+        await this.advance();
+      }
+    } finally {
+      this.busy = false;
+    }
+  }
+
   async setUserLanguage(userLang, phrases = this.phrases) {
     if (!userLang || userLang === this.userLang) return;
     this.userLang = userLang;
