@@ -28,8 +28,8 @@ before(() => {
 after(() => rmSync(root, { recursive: true, force: true }));
 
 // Start a server, send one request, return { status, body }. `via` = 'local' or 'tunnel' (forwarding headers, as cloudflared adds).
-async function ask(env, { method = 'GET', path = '/', via = 'local', headers = {}, body } = {}) {
-  const server = createDemoServer({ root, env, fetchImpl: upstream });
+async function ask(env, { method = 'GET', path = '/', via = 'local', headers = {}, body, ttsImpl } = {}) {
+  const server = createDemoServer({ root, env, fetchImpl: upstream, ttsImpl });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const { port } = server.address();
   try {
@@ -167,8 +167,8 @@ test('visitors\' conversations are never logged; this machine\'s are', async () 
 
 test('the page learns whether it is local and whether a shared key exists', async () => {
   const env = { OPENROUTER_API_KEY: 'sk-or-x', DEMO_MODEL: 'openai/gpt-4o-mini' };
-  assert.deepEqual(JSON.parse((await ask(env, { path: '/config.json', via: 'tunnel' })).body), { sharedKey: true, local: false, model: 'openai/gpt-4o-mini' });
-  assert.deepEqual(JSON.parse((await ask({}, { path: '/config.json', via: 'local' })).body), { sharedKey: false, local: true, model: 'openai/gpt-4o-mini' });
+  assert.deepEqual(JSON.parse((await ask(env, { path: '/config.json', via: 'tunnel' })).body), { sharedKey: true, local: false, model: 'openai/gpt-4o-mini', neuralSpeech: true });
+  assert.deepEqual(JSON.parse((await ask({}, { path: '/config.json', via: 'local' })).body), { sharedKey: false, local: true, model: 'openai/gpt-4o-mini', neuralSpeech: true });
   assert.equal((await ask(env, { path: '/config.json', via: 'tunnel' })).body.includes('sk-or-x'), false);
 });
 
@@ -176,9 +176,34 @@ test('samples.json lists phone intake simulator and the page is servable', async
   const res = await ask({}, { path: '/samples.json', via: 'tunnel' });
   assert.equal(res.status, 200);
   const list = JSON.parse(res.body);
-  assert.ok(list.some((s) => s.name === 'Phone call intake (Simulator)' && s.url === '/demo/phone-intake.html'));
+  assert.equal(list.some((s) => s.name === 'Phone call intake (Simulator)' && s.url === '/demo/phone-intake.html'), true);
 
   const page = await ask({}, { path: '/demo/phone-intake.html', via: 'tunnel' });
   assert.equal(page.status, 200);
 });
+
+test('/audio/speech synthesizes audio and returns audio/mpeg', async () => {
+  const mockTts = async (text, voice) => Buffer.from(`MOCK_MP3_FOR:${voice}:${text}`);
+  const res = await ask({}, {
+    method: 'POST',
+    path: '/audio/speech',
+    via: 'local',
+    headers: { 'content-type': 'application/json' },
+    body: { input: 'Hola mundo', voice: 'es-US-PalomaNeural' },
+    ttsImpl: mockTts,
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body, 'MOCK_MP3_FOR:es-US-PalomaNeural:Hola mundo');
+
+  const badRes = await ask({}, {
+    method: 'POST',
+    path: '/audio/speech',
+    via: 'local',
+    headers: { 'content-type': 'application/json' },
+    body: { input: '' },
+    ttsImpl: mockTts,
+  });
+  assert.equal(badRes.status, 400);
+});
+
 

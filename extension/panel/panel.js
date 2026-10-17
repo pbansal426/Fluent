@@ -78,12 +78,18 @@ async function loadSettings() {
   $('lang').value = state.settings.lang;
 }
 
-// With an OpenAI key the assistant uses OpenAI's natural voice; otherwise the best voice the browser has.
+// With an OpenAI key the assistant uses OpenAI's natural voice; otherwise local Edge Neural TTS, else the browser voice.
 function applyVoice() {
   const s = state.settings;
   const openai = s.apiKey && detectProvider(s.apiKey)?.id === 'openai' && /api\.openai\.com/.test(s.baseUrl);
-  speech.setNeural(openai ? createNeuralTts({ apiKey: s.apiKey, baseUrl: s.baseUrl }) : null);
-  log('voice', { neural: !!openai });
+  if (openai) {
+    speech.setNeural(createNeuralTts({ apiKey: s.apiKey, baseUrl: s.baseUrl }));
+    log('voice', { neural: true, provider: 'openai' });
+    return;
+  }
+  const localOrigin = (typeof location !== 'undefined' && /^https?:\/\//.test(location.origin)) ? location.origin : 'http://127.0.0.1:8765';
+  speech.setNeural(createNeuralTts({ baseUrl: localOrigin }));
+  log('voice', { neural: true, provider: 'edge-neural' });
 }
 
 async function saveSettings() {

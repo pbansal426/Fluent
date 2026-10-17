@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSpeech, pickVoice, spokenText, splitSentences } from '../extension/lib/speech.js';
-import { createNeuralTts } from '../extension/lib/neural-tts.js';
+import { createNeuralTts, pickNeuralVoice } from '../extension/lib/neural-tts.js';
 
 test('cancel releases speech even when Chrome never emits onend', async () => {
   let spoke;
@@ -133,4 +133,38 @@ test('spokenText expands street abbreviations and acronym phonetics', () => {
   assert.equal(spokenText('123 Calle Norte Apt. 4B', 'es'), '123 Calle Norte Apartamento 4B');
   assert.equal(spokenText('Enter your SSN and EIN', 'en'), 'Enter your S-S-N and E-I-N');
 });
+
+test('pickNeuralVoice selects appropriate high-fidelity neural voices per language', () => {
+  assert.equal(pickNeuralVoice('es'), 'es-US-PalomaNeural');
+  assert.equal(pickNeuralVoice('es-MX'), 'es-US-PalomaNeural');
+  assert.equal(pickNeuralVoice('en'), 'en-US-AvaMultilingualNeural');
+  assert.equal(pickNeuralVoice('en-US'), 'en-US-AvaMultilingualNeural');
+  assert.equal(pickNeuralVoice('hi'), 'hi-IN-SwaraNeural');
+  assert.equal(pickNeuralVoice('zh'), 'zh-CN-XiaoxiaoNeural');
+  assert.equal(pickNeuralVoice('unknown'), 'en-US-AvaMultilingualNeural');
+});
+
+test('createNeuralTts propagates language voice to audio endpoint', async () => {
+  let requestedVoice = null;
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    requestedVoice = body.voice;
+    return { ok: true, blob: async () => ({ text: body.input }) };
+  };
+  const audioFactory = (url) => {
+    const a = {
+      url,
+      pause() {},
+      play: async () => { setTimeout(() => a.onended?.(), 0); },
+    };
+    return a;
+  };
+  const tts = createNeuralTts({ fetchImpl, audioFactory });
+  await tts.speak('Hola, ¿cómo estás?', 'es');
+  assert.equal(requestedVoice, 'es-US-PalomaNeural');
+
+  await tts.speak('Hello, how can I help?', 'en');
+  assert.equal(requestedVoice, 'en-US-AvaMultilingualNeural');
+});
+
 

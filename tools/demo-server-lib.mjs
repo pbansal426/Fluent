@@ -8,6 +8,7 @@ import { createServer } from 'node:http';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
+import { spawn } from 'node:child_process';
 import { AI_HOSTS, cleanKey, createLimiter, buildUpstream } from './proxy-core.mjs';
 
 export { AI_HOSTS };
@@ -26,7 +27,7 @@ export const SAMPLE_NAMES = {
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const MAX_BODY = 1_000_000;
 
-export function createDemoServer({ root, env = process.env, fetchImpl = (...a) => fetch(...a), now = () => Date.now() } = {}) {
+export function createDemoServer({ root, env = process.env, fetchImpl = (...a) => fetch(...a), now = () => Date.now(), ttsImpl } = {}) {
   // The shared key lives on the server only: in the environment, or saved once in the private file .openrouter-key
   // next to the project (never served, never committed). Printable ASCII only, so pasted invisible characters cannot break it.
   const keyFromFile = (() => { try { return readFileSync(join(root, '.openrouter-key'), 'utf8'); } catch { return ''; } })();
@@ -35,6 +36,32 @@ export function createDemoServer({ root, env = process.env, fetchImpl = (...a) =
   const maxTokens = Number(env.DEMO_MAX_TOKENS) || 3000;
   const logDir = join(root, 'logs');
   const limited = createLimiter(env, now);
+  const speechCache = new Map();
+
+  async function synthesizeSpeech(text, voice = 'es-US-PalomaNeural') {
+    const key = `${voice}:${text}`;
+    if (speechCache.has(key)) return speechCache.get(key);
+    if (ttsImpl) {
+      const res = await ttsImpl(text, voice);
+      speechCache.set(key, res);
+      return res;
+    }
+    return new Promise((resolve, reject) => {
+      const p = spawn('uvx', ['edge-tts', '--voice', voice, '--text', text, '--write-media', '-']);
+      const chunks = [];
+      let errBuf = '';
+      p.stdout.on('data', (c) => chunks.push(c));
+      p.stderr.on('data', (c) => { errBuf += c.toString(); });
+      p.on('error', reject);
+      p.on('close', (code) => {
+        if (code !== 0) return reject(new Error(`edge-tts exited with code ${code}: ${errBuf.slice(0, 200)}`));
+        const buf = Buffer.concat(chunks);
+        if (speechCache.size > 300) speechCache.clear();
+        speechCache.set(key, buf);
+        resolve(buf);
+      });
+    });
+  }
 
   // Requests that reach us through a tunnel arrive from 127.0.0.1 too, but carry forwarding headers.
   const forwarded = (req) => req.headers['x-forwarded-for'] || req.headers['cf-connecting-ip'] || req.headers['x-real-ip'] || req.headers.forwarded || req.headers['x-forwarded-host'];
@@ -90,6 +117,24 @@ export function createDemoServer({ root, env = process.env, fetchImpl = (...a) =
       res.setHeader('x-content-type-options', 'nosniff');
       const url = new URL(req.url, 'http://x');
       if (url.pathname === '/proxy') return await proxy(req, res);
+      if (url.pathname === '/audio/speech' && req.method === 'POST') {
+        const raw = await readBody(req);
+        let parsed = {};
+        try { parsed = JSON.parse(raw.toString('utf8')); } catch {}
+        const text = String(parsed.input || '').trim();
+        if (!text) return res.writeHead(400, { 'content-type': 'text/plain' }).end('input required');
+        const voice = String(parsed.voice || 'es-US-PalomaNeural').trim();
+        try {
+          const audio = await synthesizeSpeech(text, voice);
+          return res.writeHead(200, {
+            'content-type': 'audio/mpeg',
+            'cache-control': 'public, max-age=86400',
+            'content-length': audio.length,
+          }).end(audio);
+        } catch (e) {
+          return res.writeHead(500, { 'content-type': 'text/plain' }).end(`tts error: ${e.message}`);
+        }
+      }
       if (url.pathname === '/log' && req.method === 'POST') {
         const body = (await readBody(req).catch(() => Buffer.alloc(0))).toString('utf8').slice(0, 50_000);
         if (isLocal(req) && body) {
@@ -99,7 +144,7 @@ export function createDemoServer({ root, env = process.env, fetchImpl = (...a) =
         return res.writeHead(204).end();
       }
       if (url.pathname === '/config.json') {
-        return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ sharedKey: !!sharedKey, local: isLocal(req), model: sharedModel }));
+        return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ sharedKey: !!sharedKey, local: isLocal(req), model: sharedModel, neuralSpeech: true }));
       }
       if (url.pathname === '/samples.json') return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(await samples()));
       if (url.pathname === '/') return res.writeHead(302, { location: '/demo/app/' }).end();
